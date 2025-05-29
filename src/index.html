@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' file:; media-src 'self' file:; img-src 'self' file: data:;">
+    <title>QLab Clone</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header Section -->
+        <header class="header">
+            <div class="header-section">
+                <h1>QLab Clone</h1>
+                <div class="show-info">
+                    <span id="show-name">Untitled Show</span>
+                    <span id="show-status" class="status-indicator stopped">●</span>
+                </div>
+            </div>
+            
+            <!-- Transport Controls -->
+            <div class="transport-controls">
+                <button id="go-btn" class="transport-btn go-btn" title="Go (Space)">
+                    <span>GO</span>
+                </button>
+                <button id="stop-btn" class="transport-btn stop-btn" title="Stop (Ctrl+.)">
+                    <span>■</span>
+                </button>
+                <button id="pause-btn" class="transport-btn pause-btn" title="Pause (Ctrl+P)">
+                    <span>⏸</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Cue List Section -->
+            <section class="cue-list-section">
+                <div class="section-header">
+                    <h2>Cue List</h2>
+                    <div class="cue-controls">
+                        <button id="add-audio-cue" class="btn-small" title="Add Audio Cue (Ctrl+Shift+A)">+ Audio</button>
+                        <button id="add-video-cue" class="btn-small" title="Add Video Cue (Ctrl+Shift+V)">+ Video</button>
+                        <button id="add-wait-cue" class="btn-small" title="Add Wait Cue (Ctrl+Shift+W)">+ Wait</button>
+                        <button id="add-group-cue" class="btn-small" title="Add Group Cue (Ctrl+Shift+G)">+ Group</button>
+                        <button id="delete-cue" class="btn-small btn-danger" title="Delete Cue (Delete)">Delete</button>
+                    </div>
+                </div>
+                
+                <div class="cue-list-container">
+                    <div class="cue-list-header">
+                        <div class="col-number">#</div>
+                        <div class="col-name">Name</div>
+                        <div class="col-type">Type</div>
+                        <div class="col-duration">Duration</div>
+                        <div class="col-status">Status</div>
+                    </div>
+                    <div id="cue-list" class="cue-list">
+                        <!-- Cues will be dynamically inserted here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Inspector Section -->
+            <section class="inspector-section">
+                <div class="section-header">
+                    <h2>Inspector</h2>
+                </div>
+                <div id="inspector-content" class="inspector-content">
+                    <div class="inspector-placeholder">
+                        Select a cue to view its properties
+                    </div>
+                </div>
+            </section>
+
+            <!-- Video Preview Section -->
+            <section class="video-preview-section" id="video-preview-section" style="display: none;">
+                <div class="section-header">
+                    <h2>Video Preview</h2>
+                    <div class="video-controls">
+                        <button id="video-fullscreen" class="btn-small">Fullscreen</button>
+                        <button id="video-close" class="btn-small">Close</button>
+                    </div>
+                </div>
+                <div class="video-preview-container">
+                    <video id="video-preview" controls>
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+            </section>
+        </main>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <div class="status-left">
+                <span id="cue-count">0 cues</span>
+            </div>
+            <div class="status-right">
+                <span id="current-time">00:00:00</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Audio Context (for playback) -->
+    <div id="audio-container" style="display: none;"></div>
+
+    <!-- Scripts -->
+    <script src="js/cue-manager.js"></script>
+    <script src="js/audio-engine.js"></script>
+    <script src="js/video-engine.js"></script>
+    <script src="js/ui-manager.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
