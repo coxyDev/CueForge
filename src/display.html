@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' file:; media-src 'self' file:; img-src 'self' file: data:;">
+    <title>QLab Clone - Display Output</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            cursor: none; /* Hide cursor in output mode */
+        }
+
+        #display-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .media-content {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+        }
+
+        .media-content.stretch {
+            object-fit: fill;
+        }
+
+        .media-content.aspect-16-9 {
+            aspect-ratio: 16/9;
+            object-fit: contain;
+        }
+
+        .media-content.aspect-4-3 {
+            aspect-ratio: 4/3;
+            object-fit: contain;
+        }
+
+        .test-pattern {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(45deg, #1a1a1a, #333);
+            font-size: 48px;
+            text-align: center;
+            cursor: default;
+        }
+
+        .test-pattern h1 {
+            margin-bottom: 30px;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            font-size: 64px;
+        }
+
+        .test-pattern .info {
+            font-size: 28px;
+            color: #ccc;
+            margin: 10px 0;
+        }
+
+        .test-pattern .time {
+            font-size: 24px;
+            color: #888;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .fade-out {
+            animation: fadeOut 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .error-message {
+            color: #ff4444;
+            font-size: 32px;
+            text-align: center;
+            padding: 60px;
+            background: rgba(255, 0, 0, 0.1);
+            border: 3px solid #ff4444;
+            border-radius: 12px;
+            margin: 40px;
+            cursor: default;
+        }
+
+        .standby-message {
+            color: #888;
+            font-size: 48px;
+            text-align: center;
+            cursor: default;
+        }
+    </style>
+</head>
+<body>
+    <div id="display-container">
+        <div class="standby-message">QLab Clone Output - Standby</div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        class DisplayRenderer {
+            constructor() {
+                this.container = document.getElementById('display-container');
+                this.currentContent = null;
+                this.currentMedia = null;
+                
+                this.setupIPC();
+                console.log('Display renderer initialized');
+                
+                // Update time in test patterns
+                this.startClock();
+            }
+
+            setupIPC() {
+                ipcRenderer.on('display-content', (event, content) => {
+                    this.handleContent(content);
+                });
+            }
+
+            startClock() {
+                setInterval(() => {
+                    const timeElement = document.querySelector('.time');
+                    if (timeElement) {
+                        timeElement.textContent = new Date().toLocaleTimeString();
+                    }
+                }, 1000);
+            }
+
+            async handleContent(content) {
+                try {
+                    console.log('Received display content:', content.type);
+                    
+                    switch (content.type) {
+                        case 'video':
+                            await this.showVideo(content);
+                            break;
+                        case 'image':
+                            await this.showImage(content);
+                            break;
+                        case 'test-pattern':
+                            this.showTestPattern(content);
+                            break;
+                        case 'clear':
+                            this.clearContent();
+                            break;
+                        case 'standby':
+                            this.showStandby();
+                            break;
+                        case 'stop':
+                            this.stopContent(content.cueId);
+                            break;
+                        default:
+                            console.warn('Unknown content type:', content.type);
+                    }
+                } catch (error) {
+                    console.error('Failed to handle display content:', error);
+                    this.showError(`Failed to display content: ${error.message}`);
+                }
+            }
+
+            async showVideo(content) {
+                this.clearContent();
+                
+                const video = document.createElement('video');
+                video.className = 'media-content';
+                video.controls = false;
+                video.autoplay = true;
+                video.loop = content.loop || false;
+                video.volume = content.volume || 1.0;
+                
+                // Apply aspect ratio
+                if (content.aspectRatio && content.aspectRatio !== 'auto') {
+                    video.classList.add(`aspect-${content.aspectRatio}`);
+                }
+                
+                // Apply opacity
+                if (content.opacity !== undefined) {
+                    video.style.opacity = content.opacity;
+                }
+                
+                // Handle fade effects
+                if (content.fadeIn > 0) {
+                    video.style.opacity = '0';
+                    video.classList.add('fade-in');
+                    setTimeout(() => {
+                        video.style.opacity = content.opacity || 1.0;
+                    }, 100);
+                }
+                
+                // Set video source
+                video.src = content.filePath;
+                
+                // Handle start time
+                if (content.startTime > 0) {
+                    video.addEventListener('loadeddata', () => {
+                        video.currentTime = content.startTime / 1000;
+                    });
+                }
+                
+                // Handle end time
+                if (content.endTime) {
+                    video.addEventListener('timeupdate', () => {
+                        if (video.currentTime >= (content.endTime / 1000)) {
+                            video.pause();
+                            
+                            // Handle fade out
+                            if (content.fadeOut > 0) {
+                                video.classList.add('fade-out');
+                                setTimeout(() => {
+                                    this.clearContent();
+                                }, content.fadeOut);
+                            } else {
+                                this.clearContent();
+                            }
+                        }
+                    });
+                }
+                
+                // Error handling
+                video.addEventListener('error', (e) => {
+                    console.error('Video playback error:', e);
+                    this.showError(`Video playback failed: ${video.error?.message || 'Unknown error'}`);
+                });
+                
+                // Success handling
+                video.addEventListener('loadeddata', () => {
+                    console.log('Video loaded successfully');
+                });
+                
+                this.container.appendChild(video);
+                this.currentMedia = video;
+                this.currentContent = content;
+                
+                console.log(`Video content displayed: ${content.filePath}`);
+            }
+
+            async showImage(content) {
+                this.clearContent();
+                
+                const img = document.createElement('img');
+                img.className = 'media-content';
+                
+                // Apply aspect ratio
+                if (content.aspectRatio && content.aspectRatio !== 'auto') {
+                    img.classList.add(`aspect-${content.aspectRatio}`);
+                }
+                
+                // Apply opacity
+                if (content.opacity !== undefined) {
+                    img.style.opacity = content.opacity;
+                }
+                
+                // Handle fade effects
+                if (content.fadeIn > 0) {
+                    img.style.opacity = '0';
+                    img.classList.add('fade-in');
+                    setTimeout(() => {
+                        img.style.opacity = content.opacity || 1.0;
+                    }, 100);
+                }
+                
+                // Error handling
+                img.addEventListener('error', (e) => {
+                    console.error('Image loading error:', e);
+                    this.showError(`Image loading failed: ${content.filePath}`);
+                });
+                
+                // Success handling
+                img.addEventListener('load', () => {
+                    console.log('Image loaded successfully');
+                });
+                
+                // Set image source
+                img.src = content.filePath;
+                
+                this.container.appendChild(img);
+                this.currentMedia = img;
+                this.currentContent = content;
+                
+                console.log(`Image content displayed: ${content.filePath}`);
+            }
+
+            showTestPattern(content) {
+                this.clearContent();
+                
+                const testPattern = document.createElement('div');
+                testPattern.className = 'test-pattern';
+                testPattern.innerHTML = `
+                    <h1>QLab Clone Display</h1>
+                    <div class="info">Display: ${content.displayName || 'Unknown'}</div>
+                    <div class="info">Resolution: ${content.resolution || 'Unknown'}</div>
+                    <div class="info">Test Pattern Active</div>
+                    <div class="time">${new Date().toLocaleTimeString()}</div>
+                `;
+                
+                this.container.appendChild(testPattern);
+                this.currentContent = content;
+                
+                console.log(`Test pattern displayed for: ${content.displayName}`);
+            }
+
+            showStandby() {
+                this.clearContent();
+                
+                const standby = document.createElement('div');
+                standby.className = 'standby-message';
+                standby.textContent = 'QLab Clone Output - Standby';
+                
+                this.container.appendChild(standby);
+                this.currentContent = null;
+                
+                console.log('Display in standby mode');
+            }
+
+            showError(message) {
+                this.clearContent();
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.textContent = message;
+                
+                this.container.appendChild(errorDiv);
+                
+                console.error('Display error:', message);
+            }
+
+            stopContent(cueId) {
+                if (this.currentContent && this.currentContent.cueId === cueId) {
+                    if (this.currentMedia && this.currentMedia.pause) {
+                        this.currentMedia.pause();
+                    }
+                    this.clearContent();
+                    console.log(`Stopped content for cue: ${cueId}`);
+                }
+            }
+
+            clearContent() {
+                this.container.innerHTML = '';
+                this.currentContent = null;
+                this.currentMedia = null;
+                console.log('Display cleared');
+            }
+        }
+
+        // Initialize display renderer
+        const displayRenderer = new DisplayRenderer();
+        
+        // Prevent context menu
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+        
+        // Handle keyboard shortcuts for display control
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'Escape':
+                    // Clear display on Escape
+                    displayRenderer.showStandby();
+                    break;
+                case 'F11':
+                    // Toggle fullscreen (prevent default)
+                    e.preventDefault();
+                    break;
+                case 't':
+                case 'T':
+                    // Show test pattern
+                    displayRenderer.showTestPattern({
+                        displayName: 'Keyboard Test',
+                        resolution: `${window.screen.width}x${window.screen.height}`
+                    });
+                    break;
+            }
+        });
+
+        // Handle window events
+        window.addEventListener('focus', () => {
+            console.log('Display window focused');
+        });
+        
+        window.addEventListener('blur', () => {
+            console.log('Display window blurred');
+        });
+    </script>
+</body>
+</html>

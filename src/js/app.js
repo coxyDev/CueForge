@@ -22,6 +22,16 @@ class QLABCloneApp {
             // Wait for audio engine to initialize
             await this.waitForAudioEngine();
             
+            // Initialize display manager if available
+            if (typeof DisplayManager !== 'undefined') {
+                this.displayManager = new DisplayManager();
+                await this.waitForDisplayManager();
+                window.displayManager = this.displayManager;
+                console.log('Display manager initialized');
+            } else {
+                console.log('Display manager not available - continuing without advanced display features');
+            }
+            
             // Make engines globally available
             window.audioEngine = this.audioEngine;
             window.videoEngine = this.videoEngine;
@@ -47,6 +57,22 @@ class QLABCloneApp {
         } catch (error) {
             console.error('Failed to initialize QLab Clone:', error);
             this.showError('Failed to initialize application', error.message);
+        }
+    }
+
+    async waitForDisplayManager() {
+        if (!this.displayManager) return;
+        
+        let attempts = 0;
+        const maxAttempts = 30; // 3 seconds max
+        
+        while (!this.displayManager.initialized && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        if (!this.displayManager.initialized) {
+            console.warn('Display manager failed to initialize properly');
         }
     }
 
@@ -79,8 +105,17 @@ class QLABCloneApp {
         
         this.cueManager.executeVideoCue = async (cue) => {
             console.log(`Playing video cue: ${cue.name}`);
+            
+            // Use display manager if available
+            if (this.displayManager) {
+                const success = await this.displayManager.playVideoOnOutput(cue);
+                if (success) {
+                    return Promise.resolve();
+                }
+            }
+            
+            // Fallback to preview window
             return new Promise((resolve, reject) => {
-                // For now, just play in the preview window
                 this.videoEngine.playCue(cue, resolve, reject);
             });
         };
