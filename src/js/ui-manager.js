@@ -37,11 +37,17 @@ class UIManager {
             addGroupCue: document.getElementById('add-group-cue'),
             deleteCue: document.getElementById('delete-cue'),
             
+            // Settings
+            settingsBtn: document.getElementById('settings-btn'),
+            settingsModal: document.getElementById('settings-modal'),
+            closeSettings: document.getElementById('close-settings'),
+            
             // Inspector
             inspectorContent: document.getElementById('inspector-content'),
             
             // Status bar
-            currentTime: document.getElementById('current-time')
+            currentTime: document.getElementById('current-time'),
+            displayRouting: document.getElementById('display-routing')
         };
     }
 
@@ -57,6 +63,17 @@ class UIManager {
         this.elements.addWaitCue.addEventListener('click', () => this.addCue('wait'));
         this.elements.addGroupCue.addEventListener('click', () => this.addCue('group'));
         this.elements.deleteCue.addEventListener('click', () => this.deleteSelectedCue());
+        
+        // Settings
+        this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
+        this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
+        
+        // Close modal when clicking outside
+        this.elements.settingsModal.addEventListener('click', (e) => {
+            if (e.target === this.elements.settingsModal) {
+                this.closeSettings();
+            }
+        });
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => this.handleKeydown(e));
@@ -866,6 +883,108 @@ class UIManager {
         
         // Initial update
         this.elements.currentTime.textContent = this.formatTime(new Date());
+    }
+
+    // Settings management
+    async openSettings() {
+        this.elements.settingsModal.style.display = 'flex';
+        this.elements.settingsModal.classList.add('show');
+        
+        if (window.displayManager) {
+            await this.loadDisplaySettings();
+        } else {
+            document.getElementById('displays-list').innerHTML = '<p>Display manager not available</p>';
+        }
+    }
+
+    closeSettings() {
+        this.elements.settingsModal.style.display = 'none';
+        this.elements.settingsModal.classList.remove('show');
+    }
+
+    async loadDisplaySettings() {
+        try {
+            // Refresh displays
+            await window.displayManager.detectDisplays();
+            const displays = window.displayManager.getDisplays();
+            
+            // Update displays list
+            const displaysList = document.getElementById('displays-list');
+            if (displays.length === 0) {
+                displaysList.innerHTML = '<p>No external displays detected</p>';
+            } else {
+                displaysList.innerHTML = displays.map(display => `
+                    <div class="display-item ${display.primary ? 'display-primary' : ''}">
+                        <h4>${display.name}</h4>
+                        <div class="display-info">
+                            Resolution: ${display.resolution}<br>
+                            ${display.primary ? 'Primary Display' : 'Secondary Display'}
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            // Update routing options
+            const routingSelect = document.getElementById('video-routing');
+            const routingOptions = window.displayManager.getRoutingOptions();
+            const currentRouting = window.displayManager.getCurrentRouting();
+            
+            routingSelect.innerHTML = routingOptions.map(option => 
+                `<option value="${option.id}" ${option.id.toString() === currentRouting.toString() ? 'selected' : ''}>
+                    ${option.name} ${option.resolution ? `(${option.resolution})` : ''}
+                </option>`
+            ).join('');
+            
+            // Update status bar
+            const selectedOption = routingOptions.find(opt => opt.id.toString() === currentRouting.toString());
+            this.elements.displayRouting.textContent = `Video: ${selectedOption?.name || 'Unknown'}`;
+            
+            // Set up event handlers
+            this.setupSettingsEventHandlers();
+            
+        } catch (error) {
+            console.error('Failed to load display settings:', error);
+        }
+    }
+
+    setupSettingsEventHandlers() {
+        const routingSelect = document.getElementById('video-routing');
+        const testPatternBtn = document.getElementById('test-pattern-btn');
+        const clearDisplaysBtn = document.getElementById('clear-displays-btn');
+        const refreshDisplaysBtn = document.getElementById('refresh-displays');
+        const applySettingsBtn = document.getElementById('apply-settings');
+        
+        // Remove existing listeners
+        routingSelect.replaceWith(routingSelect.cloneNode(true));
+        testPatternBtn.replaceWith(testPatternBtn.cloneNode(true));
+        clearDisplaysBtn.replaceWith(clearDisplaysBtn.cloneNode(true));
+        refreshDisplaysBtn.replaceWith(refreshDisplaysBtn.cloneNode(true));
+        applySettingsBtn.replaceWith(applySettingsBtn.cloneNode(true));
+        
+        // Re-get elements and add listeners
+        document.getElementById('video-routing').addEventListener('change', async (e) => {
+            const success = await window.displayManager.setVideoRouting(e.target.value);
+            if (success) {
+                const option = window.displayManager.getRoutingOptions().find(opt => opt.id.toString() === e.target.value);
+                this.elements.displayRouting.textContent = `Video: ${option?.name || 'Unknown'}`;
+            }
+        });
+        
+        document.getElementById('test-pattern-btn').addEventListener('click', async () => {
+            await window.displayManager.showTestPattern();
+        });
+        
+        document.getElementById('clear-displays-btn').addEventListener('click', async () => {
+            await window.displayManager.clearAllDisplays();
+        });
+        
+        document.getElementById('refresh-displays').addEventListener('click', async () => {
+            await this.loadDisplaySettings();
+        });
+        
+        document.getElementById('apply-settings').addEventListener('click', () => {
+            this.closeSettings();
+        });
     }
 }
 

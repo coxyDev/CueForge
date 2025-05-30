@@ -1,9 +1,38 @@
-<!DOCTYPE html>
+<!-- Status Bar -->
+        <footer class="status-bar">
+            <div class="status-left">
+                <span id="cue-count">0 cues</span>
+            </div>
+            <div class="status-right">
+                <span id="display-routing">Video: Preview</span>
+                <span id="current-time">00:00:00</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Display Settings</h2>
+                <button id="close-settings" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>Detected Displays</h3>
+                    <div id="displays-list">
+                        <p>Detecting displays...</p>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Video Output Routing</h3>
+                    <div class="setting-item">
+                        <label for="video-routing">Route video cues to:<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' file:; media-src 'self' file:; img-src 'self' file: data:;">
     <title>QLab Clone</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -29,6 +58,9 @@
                 </button>
                 <button id="pause-btn" class="transport-btn pause-btn" title="Pause (Ctrl+P)">
                     <span>⏸</span>
+                </button>
+                <button id="settings-btn" class="transport-btn settings-btn" title="Display Settings">
+                    <span>⚙</span>
                 </button>
             </div>
         </header>
@@ -97,18 +129,56 @@
                 <span id="cue-count">0 cues</span>
             </div>
             <div class="status-right">
+                <span id="display-routing">Video: Preview</span>
                 <span id="current-time">00:00:00</span>
             </div>
         </footer>
     </div>
 
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Display Settings</h2>
+                <button id="close-settings" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>Detected Displays</h3>
+                    <div id="displays-list">
+                        <p>Detecting displays...</p>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Video Output Routing</h3>
+                    <div class="setting-item">
+                        <label for="video-routing">Route video cues to:</label>
+                        <select id="video-routing">
+                            <option value="preview">Preview Window</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <button id="test-pattern-btn" class="btn-small">Show Test Pattern</button>
+                        <button id="clear-displays-btn" class="btn-small">Clear All Displays</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="refresh-displays" class="btn-small">Refresh Displays</button>
+                <button id="apply-settings" class="btn-primary">Apply Settings</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Audio Context (for playback) -->
     <div id="audio-container" style="display: none;"></div>
 
-    <!-- Scripts -->
+    <!-- Scripts - Back to simple loading -->
     <script src="js/cue-manager.js"></script>
     <script src="js/audio-engine.js"></script>
     <script src="js/video-engine.js"></script>
+    <script src="js/display-manager.js"></script>
     <script src="js/ui-manager.js"></script>
     <script src="js/app.js"></script>
 </body>

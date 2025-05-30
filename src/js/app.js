@@ -3,6 +3,7 @@ class QLABCloneApp {
     constructor() {
         this.cueManager = null;
         this.audioEngine = null;
+        this.videoEngine = null;
         this.uiManager = null;
         this.initialized = false;
         
@@ -18,8 +19,18 @@ class QLABCloneApp {
             this.audioEngine = new AudioEngine();
             this.videoEngine = new VideoEngine();
             
-            // Wait for engines to initialize
+            // Wait for audio engine to initialize
             await this.waitForAudioEngine();
+            
+            // Initialize display manager if available
+            if (typeof DisplayManager !== 'undefined') {
+                this.displayManager = new DisplayManager();
+                await this.waitForDisplayManager();
+                window.displayManager = this.displayManager;
+                console.log('Display manager initialized');
+            } else {
+                console.log('Display manager not available - continuing without advanced display features');
+            }
             
             // Make engines globally available
             window.audioEngine = this.audioEngine;
@@ -37,12 +48,31 @@ class QLABCloneApp {
             // Initialize with sample data for demo purposes
             this.initSampleData();
             
+            // Add basic playback functionality
+            this.setupBasicPlayback();
+            
             this.initialized = true;
             console.log('QLab Clone initialized successfully');
             
         } catch (error) {
             console.error('Failed to initialize QLab Clone:', error);
             this.showError('Failed to initialize application', error.message);
+        }
+    }
+
+    async waitForDisplayManager() {
+        if (!this.displayManager) return;
+        
+        let attempts = 0;
+        const maxAttempts = 30; // 3 seconds max
+        
+        while (!this.displayManager.initialized && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        if (!this.displayManager.initialized) {
+            console.warn('Display manager failed to initialize properly');
         }
     }
 
@@ -57,8 +87,40 @@ class QLABCloneApp {
         }
         
         if (!this.audioEngine.initialized) {
-            throw new Error('Audio engine failed to initialize');
+            console.warn('Audio engine failed to initialize properly');
         }
+    }
+
+    setupBasicPlayback() {
+        // Override the cue manager's execute methods to actually play cues
+        const originalExecuteAudioCue = this.cueManager.executeAudioCue;
+        const originalExecuteVideoCue = this.cueManager.executeVideoCue;
+        
+        this.cueManager.executeAudioCue = async (cue) => {
+            console.log(`Playing audio cue: ${cue.name}`);
+            return new Promise((resolve, reject) => {
+                this.audioEngine.playCue(cue, resolve, reject);
+            });
+        };
+        
+        this.cueManager.executeVideoCue = async (cue) => {
+            console.log(`Playing video cue: ${cue.name}`);
+            
+            // Use display manager if available
+            if (this.displayManager) {
+                const success = await this.displayManager.playVideoOnOutput(cue);
+                if (success) {
+                    return Promise.resolve();
+                }
+            }
+            
+            // Fallback to preview window
+            return new Promise((resolve, reject) => {
+                this.videoEngine.playCue(cue, resolve, reject);
+            });
+        };
+        
+        console.log('Basic playback functionality enabled');
     }
 
     initSampleData() {
@@ -79,7 +141,7 @@ class QLABCloneApp {
             name: 'Opening Video',
             volume: 0.9,
             fadeIn: 1000,
-            fullscreen: true
+            fullscreen: false // Start with preview mode
         });
         
         this.cueManager.addCue('wait', {
@@ -89,7 +151,7 @@ class QLABCloneApp {
         
         this.cueManager.addCue('group', {
             name: 'Scene Change',
-            mode: 'parallel'
+            mode: 'sequential'
         });
         
         console.log('Sample cues added');
@@ -190,6 +252,10 @@ class QLABCloneApp {
         return this.audioEngine;
     }
 
+    getVideoEngine() {
+        return this.videoEngine;
+    }
+
     getUIManager() {
         return this.uiManager;
     }
@@ -244,23 +310,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add a small delay to ensure all scripts are loaded
     setTimeout(() => {
         // Make sure all required classes are available
-        if (typeof CueManager === 'undefined') {
-            console.error('CueManager class not loaded');
-            return;
-        }
-        
-        if (typeof AudioEngine === 'undefined') {
-            console.error('AudioEngine class not loaded');
-            return;
-        }
-        
-        if (typeof VideoEngine === 'undefined') {
-            console.error('VideoEngine class not loaded');
-            return;
-        }
-        
-        if (typeof UIManager === 'undefined') {
-            console.error('UIManager class not loaded');
+        if (typeof CueManager === 'undefined' || 
+            typeof AudioEngine === 'undefined' || 
+            typeof VideoEngine === 'undefined' ||
+            typeof UIManager === 'undefined') {
+            console.error('Required classes not loaded');
             return;
         }
         
@@ -272,41 +326,33 @@ document.addEventListener('DOMContentLoaded', () => {
         // Expose app globally for debugging
         window.qlabClone = window.app;
         
-        // Development helpers - only in development
-        if (process.env.NODE_ENV === 'development') {
-            console.log('Development mode - exposing debug helpers');
-            window.debug = {
-                cueManager: () => window.app.getCueManager(),
-                audioEngine: () => window.app.getAudioEngine(),
-                videoEngine: () => window.app.getVideoEngine(),
-                uiManager: () => window.app.getUIManager(),
-                addTestCue: (type, options) => {
-                    if (type === 'audio') return window.app.addTestAudioCue(options?.name);
-                    if (type === 'wait') return window.app.addTestWaitCue(options?.duration, options?.name);
-                    return window.app.getCueManager().addCue(type, options);
-                },
-                exportShow: () => window.app.exportShow(),
-                stats: () => window.app.getCueManager().getCueStats()
-            };
-            
-            console.log('Debug helpers available via window.debug');
-            console.log('Available commands:');
-            console.log('- debug.addTestCue("audio", {name: "My Audio"})');
-            console.log('- debug.addTestCue("wait", {duration: 3000, name: "My Wait"})');
-            console.log('- debug.exportShow()');
-            console.log('- debug.stats()');
-        }
-    }, 100); // 100ms delay to ensure all scripts are loaded
+        // Development helpers
+        window.debug = {
+            cueManager: () => window.app.getCueManager(),
+            audioEngine: () => window.app.getAudioEngine(),
+            videoEngine: () => window.app.getVideoEngine(),
+            uiManager: () => window.app.getUIManager(),
+            addTestCue: (type, options) => {
+                if (type === 'audio') return window.app.addTestAudioCue(options?.name);
+                if (type === 'wait') return window.app.addTestWaitCue(options?.duration, options?.name);
+                return window.app.getCueManager().addCue(type, options);
+            },
+            exportShow: () => window.app.exportShow(),
+            stats: () => window.app.getCueManager().getCueStats()
+        };
+        
+        console.log('Debug helpers available via window.debug');
+        console.log('Try: debug.addTestCue("audio", {name: "My Test Audio"})');
+        
+    }, 100); // Small delay to ensure all scripts are loaded
 });
 
 // Handle app focus/blur for audio context management
 document.addEventListener('visibilitychange', () => {
     if (window.app && window.app.audioEngine) {
         if (document.hidden) {
-            // App is hidden, could pause audio context to save resources
             console.log('App hidden');
         } else {
-            // App is visible, ensure audio context is running
             console.log('App visible');
             window.app.audioEngine.ensureAudioContext().catch(console.error);
         }

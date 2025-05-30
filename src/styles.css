@@ -17,6 +17,23 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    overflow: hidden; /* Prevent body scroll */
+}
+
+/* Ensure all major sections have proper flex behavior */
+.header {
+    flex-shrink: 0;
+}
+
+.main-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+}
+
+.status-bar {
+    flex-shrink: 0;
 }
 
 /* Header Styles */
@@ -109,11 +126,196 @@ body {
     background: #e0a800;
 }
 
+.settings-btn {
+    background: #6c757d;
+    border-color: #545b62;
+}
+
+.settings-btn:hover {
+    background: #545b62;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    display: none; /* Hidden by default */
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background: #2d2d2d;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    border: 1px solid #404040;
+}
+
+.modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #404040;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 18px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    color: #fff;
+    background: #404040;
+    border-radius: 4px;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    padding: 20px;
+    border-top: 1px solid #404040;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.settings-section {
+    margin-bottom: 30px;
+}
+
+.settings-section h3 {
+    color: #fff;
+    font-size: 16px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #404040;
+    padding-bottom: 5px;
+}
+
+.setting-item {
+    margin-bottom: 15px;
+}
+
+.setting-item label {
+    display: block;
+    color: #ccc;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+
+.setting-item select {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    color: white;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+
+.setting-item select:focus {
+    outline: none;
+    border-color: #0d7377;
+}
+
+.btn-primary {
+    background: #0d7377;
+    border: 1px solid #0a5d61;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-primary:hover {
+    background: #0a5d61;
+}
+
+.display-item {
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.display-item h4 {
+    color: #fff;
+    margin: 0 0 5px 0;
+    font-size: 14px;
+}
+
+.display-item .display-info {
+    color: #ccc;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.display-item .display-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.display-primary {
+    border-color: #0d7377;
+}
+
+.display-primary h4::after {
+    content: " (Primary)";
+    color: #0d7377;
+    font-weight: normal;
+    font-size: 12px;
+}
+
+/* Debug: Add temporary borders to see layout */
+.main-content {
+    border: 2px solid red !important; /* Temporary debug */
+}
+
+.cue-list-section {
+    border: 2px solid blue !important; /* Temporary debug */
+}
+
+.inspector-section {
+    border: 2px solid green !important; /* Temporary debug */
+}
+
 /* Main Content */
 .main-content {
     display: flex;
     flex: 1;
     overflow: hidden;
+    min-height: 0; /* Important for flex children */
 }
 
 /* Section Styles */
@@ -371,6 +573,13 @@ body {
     font-size: 11px;
     color: #b0b0b0;
     min-height: 28px;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+.status-right {
+    display: flex;
+    gap: 15px;
+    align-items: center;
 }
 
 /* Scrollbar Styles */

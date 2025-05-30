@@ -1,9 +1,10 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 
-// Keep a global reference of the window object
+// Keep a global reference of the window objects
 let mainWindow;
+let displayWindows = new Map(); // windowId -> BrowserWindow
 
 function createWindow() {
     // Create the browser window
@@ -37,6 +38,13 @@ function createWindow() {
 
     // Emitted when the window is closed
     mainWindow.on('closed', () => {
+        // Close all display windows when main window closes
+        for (const [windowId, displayWindow] of displayWindows) {
+            if (!displayWindow.isDestroyed()) {
+                displayWindow.close();
+            }
+        }
+        displayWindows.clear();
         mainWindow = null;
     });
 
@@ -244,22 +252,106 @@ ipcMain.handle('select-video-file', async () => {
     return { success: false };
 });
 
-ipcMain.handle('select-media-file', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-        properties: ['openFile'],
-        filters: [
-            { name: 'Media Files', extensions: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma', 'mp4', 'avi', 'mov', 'wmv', 'mkv', 'webm', 'flv', 'm4v'] },
-            { name: 'Audio Files', extensions: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'] },
-            { name: 'Video Files', extensions: ['mp4', 'avi', 'mov', 'wmv', 'mkv', 'webm', 'flv', 'm4v'] },
-            { name: 'All Files', extensions: ['*'] }
-        ]
-    });
-    
-    if (!result.canceled) {
-        return { success: true, filePath: result.filePaths[0] };
+// Display Management IPC Handlers
+ipcMain.handle('get-displays', async () => {
+    try {
+        const displays = screen.getAllDisplays();
+        console.log(`Found ${displays.length} displays`);
+        
+        return displays.map((display, index) => ({
+            id: display.id,
+            label: display.label || `Display ${index + 1}`,
+            bounds: display.bounds,
+            workArea: display.workArea,
+            scaleFactor: display.scaleFactor,
+            rotation: display.rotation,
+            primary: display === screen.getPrimaryDisplay(),
+            internal: display.internal || false
+        }));
+    } catch (error) {
+        console.error('Failed to get displays:', error);
+        return [];
     }
-    
-    return { success: false };
+});
+
+ipcMain.handle('create-display-window', async (event, config) => {
+    try {
+        const windowId = `display-${Date.now()}`;
+        
+        console.log(`Creating display window for: ${config.displayName}`);
+        
+        const displayWindow = new BrowserWindow({
+            width: config.bounds.width,
+            height: config.bounds.height,
+            x: config.bounds.x,
+            y: config.bounds.y,
+            fullscreen: true,
+            frame: false,
+            alwaysOnTop: true,
+            skipTaskbar: true,
+            webPreferences: {
+                nodeIntegration: true,
+                contextIsolation: false,
+                enableRemoteModule: true
+            },
+            show: false,
+            backgroundColor: '#000000'
+        });
+        
+        // Load display content page
+        const displayHtmlPath = path.join(__dirname, 'src', 'display.html');
+        await displayWindow.loadFile(displayHtmlPath);
+        
+        // Show the window
+        displayWindow.show();
+        displayWindow.focus();
+        
+        // Store reference
+        displayWindows.set(windowId, displayWindow);
+        
+        // Handle window close
+        displayWindow.on('closed', () => {
+            displayWindows.delete(windowId);
+            console.log(`Display window closed: ${windowId}`);
+        });
+        
+        console.log(`Created display window: ${windowId} for ${config.displayName}`);
+        return windowId;
+    } catch (error) {
+        console.error('Failed to create display window:', error);
+        throw error;
+    }
+});
+
+ipcMain.handle('close-display-window', async (event, windowId) => {
+    try {
+        const displayWindow = displayWindows.get(windowId);
+        if (displayWindow && !displayWindow.isDestroyed()) {
+            displayWindow.close();
+        }
+        displayWindows.delete(windowId);
+        
+        console.log(`Closed display window: ${windowId}`);
+        return true;
+    } catch (error) {
+        console.error('Failed to close display window:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('send-to-display', async (event, data) => {
+    try {
+        const displayWindow = displayWindows.get(data.windowId);
+        if (displayWindow && !displayWindow.isDestroyed()) {
+            displayWindow.webContents.send('display-content', data.content);
+            return true;
+        }
+        console.warn(`Display window not found: ${data.windowId}`);
+        return false;
+    } catch (error) {
+        console.error('Failed to send to display:', error);
+        return false;
+    }
 });
 
 // App event handlers
