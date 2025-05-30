@@ -40,41 +40,35 @@ class AudioEngine {
         }
     }
 
-    async loadAudioFile(filePath) {
-        // This method is no longer used for playback, but kept for compatibility
-        console.warn('loadAudioFile called - this method is deprecated in favor of direct HTML5 audio');
-        throw new Error('Use HTML5 Audio directly instead of loadAudioFile');
-    }
-
-    async loadAudioFileViaElement(fileUrl) {
-        return new Promise((resolve, reject) => {
-            const audio = new Audio();
-            
-            audio.addEventListener('canplaythrough', async () => {
-                try {
-                    // Create an AudioBuffer from the HTML audio element
-                    // This is a simplified approach for basic functionality
-                    const duration = audio.duration;
-                    const sampleRate = this.audioContext.sampleRate;
-                    const arrayBuffer = this.audioContext.createBuffer(2, duration * sampleRate, sampleRate);
-                    
-                    console.log(`Audio loaded: ${duration}s, ${sampleRate}Hz`);
-                    resolve(arrayBuffer);
-                } catch (error) {
-                    reject(error);
-                }
-            });
-            
-            audio.addEventListener('error', (e) => {
-                const errorMsg = `Audio loading error: ${audio.error?.message || 'Unknown error'}`;
-                console.error(errorMsg, e);
-                reject(new Error(errorMsg));
-            });
-            
-            // Set the source
-            audio.src = fileUrl;
-            audio.load(); // Explicitly load the audio
-        });
+    // Convert file path to proper URL format
+    getFileUrl(filePath) {
+        if (!filePath) return null;
+        
+        // If it's already a proper URL, return it
+        if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('blob:')) {
+            return filePath;
+        }
+        
+        // Handle file:// URLs
+        if (filePath.startsWith('file://')) {
+            return filePath;
+        }
+        
+        // Convert Windows/Unix paths to file:// URLs
+        let normalizedPath = filePath.replace(/\\/g, '/');
+        
+        // For Windows drive letters (C:, D:, etc.)
+        if (normalizedPath.match(/^[A-Z]:/i)) {
+            return `file:///${normalizedPath}`;
+        }
+        
+        // For Unix-style absolute paths
+        if (normalizedPath.startsWith('/')) {
+            return `file://${normalizedPath}`;
+        }
+        
+        // For relative paths, assume they're relative to the app
+        return `file://${normalizedPath}`;
     }
 
     async playCue(cue, onComplete, onError) {
@@ -88,21 +82,23 @@ class AudioEngine {
             console.log(`Playing audio cue: ${cue.name}`);
             console.log(`File path: ${cue.filePath}`);
 
-            // Use HTML5 Audio element directly - much simpler!
+            // Get proper file URL
+            const audioUrl = this.getFileUrl(cue.filePath);
+            console.log(`Audio URL: ${audioUrl}`);
+
+            // Use HTML5 Audio element
             const audio = new Audio();
             
-            // Set the source directly - let the browser handle the file path
-            audio.src = cue.filePath;
-            audio.volume = cue.volume || 1.0;
+            // Set properties before setting src
+            audio.volume = Math.max(0, Math.min(1, cue.volume || 1.0));
             audio.loop = cue.loop || false;
-            
-            console.log(`Audio src set to: ${audio.src}`);
+            audio.preload = 'auto';
             
             // Handle start time
             if (cue.startTime > 0) {
                 audio.addEventListener('loadeddata', () => {
                     audio.currentTime = cue.startTime / 1000;
-                });
+                }, { once: true });
             }
             
             // Handle completion
@@ -116,10 +112,10 @@ class AudioEngine {
                 }
             };
             
-            audio.addEventListener('ended', handleEnd);
+            audio.addEventListener('ended', handleEnd, { once: true });
             
             audio.addEventListener('error', (e) => {
-                const errorMsg = `Audio playback failed for: ${cue.name}`;
+                const errorMsg = `Audio playback failed for: ${cue.name} - ${audio.error?.message || 'Unknown error'}`;
                 console.error(errorMsg, e);
                 console.error('Audio error details:', audio.error);
                 if (onError) onError(new Error(errorMsg));
@@ -127,10 +123,14 @@ class AudioEngine {
             
             audio.addEventListener('canplay', () => {
                 console.log(`Audio ready to play: ${cue.name}`);
+            }, { once: true });
+            
+            audio.addEventListener('loadstart', () => {
+                console.log(`Audio loading started: ${cue.name}`);
             });
             
             // Handle end time
-            if (cue.endTime) {
+            if (cue.endTime && cue.endTime > 0) {
                 audio.addEventListener('timeupdate', () => {
                     if (audio.currentTime >= (cue.endTime / 1000)) {
                         audio.pause();
@@ -145,6 +145,10 @@ class AudioEngine {
                 onComplete: handleEnd
             });
             
+            // Set the source and load
+            audio.src = audioUrl;
+            audio.load();
+            
             // Start playback
             try {
                 const playPromise = audio.play();
@@ -154,6 +158,8 @@ class AudioEngine {
                 console.log(`Audio playback started successfully: ${cue.name}`);
             } catch (playError) {
                 console.error('Audio play() failed:', playError);
+                // Remove from active sounds on failure
+                this.activeSounds.delete(cue.id);
                 if (onError) onError(playError);
             }
             
@@ -168,12 +174,8 @@ class AudioEngine {
         if (audioData) {
             try {
                 if (audioData.audio) {
-                    // HTML5 Audio element
                     audioData.audio.pause();
                     audioData.audio.currentTime = 0;
-                } else if (audioData.source) {
-                    // Web Audio API source
-                    audioData.source.stop();
                 }
                 audioData.onComplete();
             } catch (error) {
@@ -183,13 +185,12 @@ class AudioEngine {
     }
 
     stopAllCues() {
+        console.log('Stopping all audio cues');
         for (const [cueId, audioData] of this.activeSounds) {
             try {
                 if (audioData.audio) {
                     audioData.audio.pause();
                     audioData.audio.currentTime = 0;
-                } else if (audioData.source) {
-                    audioData.source.stop();
                 }
             } catch (error) {
                 console.warn('Error stopping cue:', cueId, error);
@@ -209,7 +210,8 @@ class AudioEngine {
     }
 
     isPlaying(cueId) {
-        return this.activeSounds.has(cueId);
+        const audioData = this.activeSounds.get(cueId);
+        return audioData && audioData.audio && !audioData.audio.paused;
     }
 
     getActiveCues() {
@@ -220,23 +222,7 @@ class AudioEngine {
     async getAudioFileInfo(filePath) {
         try {
             console.log('Getting audio file info for:', filePath);
-            
-            // Fix the file path for Windows
-            let fileUrl = filePath;
-            
-            // If it's already a file:// URL, use it as-is
-            if (!fileUrl.startsWith('file://')) {
-                // Convert Windows path to proper file URL
-                fileUrl = fileUrl.replace(/\\/g, '/');
-                
-                // Ensure it starts with file:// and has proper drive format
-                if (fileUrl.match(/^[A-Z]:/)) {
-                    fileUrl = `file:///${fileUrl}`;
-                } else {
-                    fileUrl = `file://${fileUrl}`;
-                }
-            }
-            
+            const fileUrl = this.getFileUrl(filePath);
             console.log('Getting metadata for URL:', fileUrl);
             return await this.getAudioFileInfoViaElement(fileUrl);
         } catch (error) {
@@ -269,65 +255,6 @@ class AudioEngine {
             audio.src = fileUrl;
             audio.load();
         });
-    }
-
-    // Analyze audio file for waveform display (basic implementation)
-    async analyzeAudioFile(filePath, resolution = 1000) {
-        try {
-            const audioBuffer = await this.loadAudioFile(filePath);
-            const channelData = audioBuffer.getChannelData(0); // Use first channel
-            const blockSize = Math.floor(channelData.length / resolution);
-            const peaks = [];
-            
-            for (let i = 0; i < resolution; i++) {
-                const start = i * blockSize;
-                const end = Math.min(start + blockSize, channelData.length);
-                let max = 0;
-                
-                for (let j = start; j < end; j++) {
-                    const value = Math.abs(channelData[j]);
-                    if (value > max) max = value;
-                }
-                
-                peaks.push(max);
-            }
-            
-            return peaks;
-        } catch (error) {
-            console.error('Failed to analyze audio file:', error);
-            return null;
-        }
-    }
-
-    // Windows-specific audio device management
-    async getAudioDevices() {
-        try {
-            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                return devices.filter(device => device.kind === 'audiooutput');
-            }
-            return [];
-        } catch (error) {
-            console.error('Failed to enumerate audio devices:', error);
-            return [];
-        }
-    }
-
-    // Set audio output device (Chrome/Edge support)
-    async setAudioOutputDevice(deviceId) {
-        try {
-            if (this.audioContext.setSinkId) {
-                await this.audioContext.setSinkId(deviceId);
-                console.log(`Audio output set to device: ${deviceId}`);
-                return true;
-            } else {
-                console.warn('setSinkId not supported in this browser');
-                return false;
-            }
-        } catch (error) {
-            console.error('Failed to set audio output device:', error);
-            return false;
-        }
     }
 
     // Get supported audio formats

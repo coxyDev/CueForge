@@ -12,6 +12,9 @@ class UIManager {
         
         // Update time display
         this.startTimeUpdater();
+        
+        // Initialize master volume control
+        this.setupMasterVolumeControl();
     }
 
     initializeElements() {
@@ -49,6 +52,41 @@ class UIManager {
             currentTime: document.getElementById('current-time'),
             displayRouting: document.getElementById('display-routing')
         };
+    }
+
+    setupMasterVolumeControl() {
+        // Create master volume control in the header
+        const volumeControl = document.createElement('div');
+        volumeControl.className = 'master-volume-control';
+        volumeControl.innerHTML = `
+            <label for="master-volume">Master</label>
+            <input type="range" id="master-volume" min="0" max="1" step="0.01" value="${this.cueManager.getMasterVolume()}">
+            <span id="master-volume-display">${Math.round(this.cueManager.getMasterVolume() * 100)}%</span>
+        `;
+        
+        // Insert after transport controls
+        const transportControls = document.querySelector('.transport-controls');
+        transportControls.appendChild(volumeControl);
+        
+        // Bind volume control events
+        const volumeSlider = document.getElementById('master-volume');
+        const volumeDisplay = document.getElementById('master-volume-display');
+        
+        volumeSlider.addEventListener('input', (e) => {
+            const volume = parseFloat(e.target.value);
+            volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
+        });
+        
+        volumeSlider.addEventListener('change', (e) => {
+            const volume = parseFloat(e.target.value);
+            this.cueManager.setMasterVolume(volume);
+        });
+        
+        // Update volume control when master volume changes
+        this.cueManager.on('volumeChanged', (data) => {
+            volumeSlider.value = data.masterVolume;
+            volumeDisplay.textContent = `${Math.round(data.masterVolume * 100)}%`;
+        });
     }
 
     bindEvents() {
@@ -126,7 +164,7 @@ class UIManager {
 
     handleKeydown(e) {
         // Only handle shortcuts when not in input fields
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
             return;
         }
         
@@ -147,6 +185,10 @@ class UIManager {
             case 'ArrowDown':
                 e.preventDefault();
                 this.selectNextCue();
+                break;
+            case 'Escape':
+                e.preventDefault();
+                this.cueManager.stop();
                 break;
         }
     }
@@ -350,8 +392,13 @@ class UIManager {
             element.classList.add('playing');
         }
         
+        // Add auto-continue indicator
+        if (cue.autoContinue) {
+            element.classList.add('auto-continue');
+        }
+        
         element.innerHTML = `
-            <div class="cue-number">${cue.number}</div>
+            <div class="cue-number">${cue.number}${cue.autoContinue ? ' →' : ''}</div>
             <div class="cue-name">${cue.name}</div>
             <div class="cue-type">${cue.type}</div>
             <div class="cue-duration">${this.formatDuration(cue.duration)}</div>
@@ -372,6 +419,7 @@ class UIManager {
     updateCueElement(cue) {
         const element = document.querySelector(`[data-cue-id="${cue.id}"]`);
         if (element) {
+            element.querySelector('.cue-number').textContent = cue.number + (cue.autoContinue ? ' →' : '');
             element.querySelector('.cue-name').textContent = cue.name;
             element.querySelector('.cue-duration').textContent = this.formatDuration(cue.duration);
             
@@ -379,8 +427,9 @@ class UIManager {
             statusElement.textContent = cue.status;
             statusElement.className = `cue-status ${cue.status}`;
             
-            // Update playing state
+            // Update playing and auto-continue states
             element.classList.toggle('playing', cue.status === 'playing');
+            element.classList.toggle('auto-continue', cue.autoContinue);
         }
     }
 
@@ -433,6 +482,29 @@ class UIManager {
                 <div class="inspector-field">
                     <label>Post-wait (ms)</label>
                     <input type="number" id="cue-postwait" value="${cue.postWait}" min="0">
+                </div>
+            </div>
+            
+            <div class="inspector-group">
+                <h3>Auto-Continue</h3>
+                <div class="inspector-field">
+                    <label>
+                        <input type="checkbox" id="auto-continue" ${cue.autoContinue ? 'checked' : ''}>
+                        Auto-continue to next cue
+                    </label>
+                </div>
+                <div class="inspector-field">
+                    <label>Continue delay (ms)</label>
+                    <input type="number" id="continue-delay" value="${cue.continueDelay}" min="0" ${!cue.autoContinue ? 'disabled' : ''}>
+                </div>
+                <div class="inspector-field">
+                    <label>Follow target</label>
+                    <select id="auto-follow-target" ${!cue.autoContinue ? 'disabled' : ''}>
+                        <option value="">Next in sequence</option>
+                        ${this.cueManager.cues.filter(c => c.id !== cue.id).map(c => 
+                            `<option value="${c.id}" ${cue.autoFollowTarget === c.id ? 'selected' : ''}>${c.number} - ${c.name}</option>`
+                        ).join('')}
+                    </select>
                 </div>
             </div>
         `;
@@ -612,9 +684,14 @@ class UIManager {
         const preWaitInput = document.getElementById('cue-prewait');
         const postWaitInput = document.getElementById('cue-postwait');
 
+        // Auto-continue fields
+        const autoContinueCheckbox = document.getElementById('auto-continue');
+        const continueDelayInput = document.getElementById('continue-delay');
+        const autoFollowTargetSelect = document.getElementById('auto-follow-target');
+
         if (numberInput) {
             numberInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { number: parseFloat(e.target.value) || cue.number });
+                this.cueManager.updateCue(cue.id, { number: e.target.value || cue.number });
             });
         }
 
@@ -633,6 +710,31 @@ class UIManager {
         if (postWaitInput) {
             postWaitInput.addEventListener('change', (e) => {
                 this.cueManager.updateCue(cue.id, { postWait: parseInt(e.target.value) || 0 });
+            });
+        }
+
+        // Auto-continue events
+        if (autoContinueCheckbox) {
+            autoContinueCheckbox.addEventListener('change', (e) => {
+                const autoContinue = e.target.checked;
+                this.cueManager.updateCue(cue.id, { autoContinue });
+                
+                // Enable/disable related fields
+                if (continueDelayInput) continueDelayInput.disabled = !autoContinue;
+                if (autoFollowTargetSelect) autoFollowTargetSelect.disabled = !autoContinue;
+            });
+        }
+
+        if (continueDelayInput) {
+            continueDelayInput.addEventListener('change', (e) => {
+                this.cueManager.updateCue(cue.id, { continueDelay: parseInt(e.target.value) || 0 });
+            });
+        }
+
+        if (autoFollowTargetSelect) {
+            autoFollowTargetSelect.addEventListener('change', (e) => {
+                const target = e.target.value || null;
+                this.cueManager.updateCue(cue.id, { autoFollowTarget: target });
             });
         }
 
@@ -878,11 +980,15 @@ class UIManager {
 
     startTimeUpdater() {
         setInterval(() => {
-            this.elements.currentTime.textContent = this.formatTime(new Date());
+            if (this.elements.currentTime) {
+                this.elements.currentTime.textContent = this.formatTime(new Date());
+            }
         }, 1000);
         
         // Initial update
-        this.elements.currentTime.textContent = this.formatTime(new Date());
+        if (this.elements.currentTime) {
+            this.elements.currentTime.textContent = this.formatTime(new Date());
+        }
     }
 
     // Settings management
@@ -893,7 +999,10 @@ class UIManager {
         if (window.displayManager) {
             await this.loadDisplaySettings();
         } else {
-            document.getElementById('displays-list').innerHTML = '<p>Display manager not available</p>';
+            const displaysList = document.getElementById('displays-list');
+            if (displaysList) {
+                displaysList.innerHTML = '<p>Display manager not available</p>';
+            }
         }
     }
 
@@ -910,34 +1019,38 @@ class UIManager {
             
             // Update displays list
             const displaysList = document.getElementById('displays-list');
-            if (displays.length === 0) {
-                displaysList.innerHTML = '<p>No external displays detected</p>';
-            } else {
-                displaysList.innerHTML = displays.map(display => `
-                    <div class="display-item ${display.primary ? 'display-primary' : ''}">
-                        <h4>${display.name}</h4>
-                        <div class="display-info">
-                            Resolution: ${display.resolution}<br>
-                            ${display.primary ? 'Primary Display' : 'Secondary Display'}
+            if (displaysList) {
+                if (displays.length === 0) {
+                    displaysList.innerHTML = '<p>No external displays detected</p>';
+                } else {
+                    displaysList.innerHTML = displays.map(display => `
+                        <div class="display-item ${display.primary ? 'display-primary' : ''}">
+                            <h4>${display.name}</h4>
+                            <div class="display-info">
+                                Resolution: ${display.resolution}<br>
+                                ${display.primary ? 'Primary Display' : 'Secondary Display'}
+                            </div>
                         </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
             
             // Update routing options
             const routingSelect = document.getElementById('video-routing');
-            const routingOptions = window.displayManager.getRoutingOptions();
-            const currentRouting = window.displayManager.getCurrentRouting();
-            
-            routingSelect.innerHTML = routingOptions.map(option => 
-                `<option value="${option.id}" ${option.id.toString() === currentRouting.toString() ? 'selected' : ''}>
-                    ${option.name} ${option.resolution ? `(${option.resolution})` : ''}
-                </option>`
-            ).join('');
-            
-            // Update status bar
-            const selectedOption = routingOptions.find(opt => opt.id.toString() === currentRouting.toString());
-            this.elements.displayRouting.textContent = `Video: ${selectedOption?.name || 'Unknown'}`;
+            if (routingSelect) {
+                const routingOptions = window.displayManager.getRoutingOptions();
+                const currentRouting = window.displayManager.getCurrentRouting();
+                
+                routingSelect.innerHTML = routingOptions.map(option => 
+                    `<option value="${option.id}" ${option.id.toString() === currentRouting.toString() ? 'selected' : ''}>
+                        ${option.name} ${option.resolution ? `(${option.resolution})` : ''}
+                    </option>`
+                ).join('');
+                
+                // Update status bar
+                const selectedOption = routingOptions.find(opt => opt.id.toString() === currentRouting.toString());
+                this.elements.displayRouting.textContent = `Video: ${selectedOption ? selectedOption.name : 'Unknown'}`;
+            }
             
             // Set up event handlers
             this.setupSettingsEventHandlers();
@@ -954,37 +1067,67 @@ class UIManager {
         const refreshDisplaysBtn = document.getElementById('refresh-displays');
         const applySettingsBtn = document.getElementById('apply-settings');
         
-        // Remove existing listeners
-        routingSelect.replaceWith(routingSelect.cloneNode(true));
-        testPatternBtn.replaceWith(testPatternBtn.cloneNode(true));
-        clearDisplaysBtn.replaceWith(clearDisplaysBtn.cloneNode(true));
-        refreshDisplaysBtn.replaceWith(refreshDisplaysBtn.cloneNode(true));
-        applySettingsBtn.replaceWith(applySettingsBtn.cloneNode(true));
+        // Remove existing listeners by cloning elements
+        if (routingSelect) {
+            const newRoutingSelect = routingSelect.cloneNode(true);
+            routingSelect.parentNode.replaceChild(newRoutingSelect, routingSelect);
+        }
+        if (testPatternBtn) {
+            const newTestPatternBtn = testPatternBtn.cloneNode(true);
+            testPatternBtn.parentNode.replaceChild(newTestPatternBtn, testPatternBtn);
+        }
+        if (clearDisplaysBtn) {
+            const newClearDisplaysBtn = clearDisplaysBtn.cloneNode(true);
+            clearDisplaysBtn.parentNode.replaceChild(newClearDisplaysBtn, clearDisplaysBtn);
+        }
+        if (refreshDisplaysBtn) {
+            const newRefreshDisplaysBtn = refreshDisplaysBtn.cloneNode(true);
+            refreshDisplaysBtn.parentNode.replaceChild(newRefreshDisplaysBtn, refreshDisplaysBtn);
+        }
+        if (applySettingsBtn) {
+            const newApplySettingsBtn = applySettingsBtn.cloneNode(true);
+            applySettingsBtn.parentNode.replaceChild(newApplySettingsBtn, applySettingsBtn);
+        }
         
         // Re-get elements and add listeners
-        document.getElementById('video-routing').addEventListener('change', async (e) => {
-            const success = await window.displayManager.setVideoRouting(e.target.value);
-            if (success) {
-                const option = window.displayManager.getRoutingOptions().find(opt => opt.id.toString() === e.target.value);
-                this.elements.displayRouting.textContent = `Video: ${option?.name || 'Unknown'}`;
-            }
-        });
+        const newRoutingSelect = document.getElementById('video-routing');
+        if (newRoutingSelect) {
+            newRoutingSelect.addEventListener('change', async (e) => {
+                const success = await window.displayManager.setVideoRouting(e.target.value);
+                if (success) {
+                    const option = window.displayManager.getRoutingOptions().find(opt => opt.id.toString() === e.target.value);
+                    this.elements.displayRouting.textContent = `Video: ${option ? option.name : 'Unknown'}`;
+                }
+            });
+        }
         
-        document.getElementById('test-pattern-btn').addEventListener('click', async () => {
-            await window.displayManager.showTestPattern();
-        });
+        const newTestPatternBtn = document.getElementById('test-pattern-btn');
+        if (newTestPatternBtn) {
+            newTestPatternBtn.addEventListener('click', async () => {
+                await window.displayManager.showTestPattern();
+            });
+        }
         
-        document.getElementById('clear-displays-btn').addEventListener('click', async () => {
-            await window.displayManager.clearAllDisplays();
-        });
+        const newClearDisplaysBtn = document.getElementById('clear-displays-btn');
+        if (newClearDisplaysBtn) {
+            newClearDisplaysBtn.addEventListener('click', async () => {
+                await window.displayManager.clearAllDisplays();
+            });
+        }
         
-        document.getElementById('refresh-displays').addEventListener('click', async () => {
-            await this.loadDisplaySettings();
-        });
+        const newRefreshDisplaysBtn = document.getElementById('refresh-displays');
+        if (newRefreshDisplaysBtn) {
+            newRefreshDisplaysBtn.addEventListener('click', async () => {
+                await this.loadDisplaySettings();
+            });
+        }
         
-        document.getElementById('apply-settings').addEventListener('click', () => {
-            this.closeSettings();
-        });
+        const newApplySettingsBtn = document.getElementById('apply-settings');
+        if (newApplySettingsBtn) {
+            newApplySettingsBtn.addEventListener('click', () => {
+                this.closeSettings();
+            });
+        }
     }
 }
 

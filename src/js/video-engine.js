@@ -48,15 +48,40 @@ class VideoEngine {
         }
     }
 
+    // Convert file path to proper URL format
+    getFileUrl(filePath) {
+        if (!filePath) return null;
+        
+        // If it's already a proper URL, return it
+        if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('blob:')) {
+            return filePath;
+        }
+        
+        // Handle file:// URLs
+        if (filePath.startsWith('file://')) {
+            return filePath;
+        }
+        
+        // Convert Windows/Unix paths to file:// URLs
+        let normalizedPath = filePath.replace(/\\/g, '/');
+        
+        // For Windows drive letters (C:, D:, etc.)
+        if (normalizedPath.match(/^[A-Z]:/i)) {
+            return `file:///${normalizedPath}`;
+        }
+        
+        // For Unix-style absolute paths
+        if (normalizedPath.startsWith('/')) {
+            return `file://${normalizedPath}`;
+        }
+        
+        // For relative paths, assume they're relative to the app
+        return `file://${normalizedPath}`;
+    }
+
     async loadVideoFile(filePath) {
         try {
-            // Convert Windows paths and handle file:// protocol
-            const normalizedPath = filePath.replace(/\\/g, '/');
-            const fileUrl = normalizedPath.startsWith('file://') ? 
-                normalizedPath : 
-                `file:///${normalizedPath.replace(/^([A-Z]):/, '$1')}`;
-            
-            return fileUrl;
+            return this.getFileUrl(filePath);
         } catch (error) {
             console.error('Failed to load video file:', error);
             throw new Error(`Could not load video file: ${error.message}`);
@@ -69,18 +94,25 @@ class VideoEngine {
                 throw new Error('No video file specified');
             }
 
+            console.log(`Playing video cue: ${cue.name}`);
+            console.log(`File path: ${cue.filePath}`);
+
             // Load the video file
             const videoUrl = await this.loadVideoFile(cue.filePath);
+            console.log(`Video URL: ${videoUrl}`);
             
             // Create video element for playback
             const video = document.createElement('video');
             video.src = videoUrl;
-            video.volume = cue.volume || 1.0;
+            video.volume = Math.max(0, Math.min(1, cue.volume || 1.0));
             video.loop = cue.loop || false;
+            video.preload = 'auto';
             
-            // Set start and end times
-            if (cue.startTime) {
-                video.currentTime = cue.startTime / 1000;
+            // Set start time
+            if (cue.startTime && cue.startTime > 0) {
+                video.addEventListener('loadeddata', () => {
+                    video.currentTime = cue.startTime / 1000;
+                }, { once: true });
             }
             
             // Handle aspect ratio
@@ -107,18 +139,31 @@ class VideoEngine {
                     if (video.parentNode) {
                         video.parentNode.removeChild(video);
                     }
+                    console.log(`Video cue completed: ${cue.name}`);
                     if (onComplete) onComplete();
                 }
             };
             
             // Handle video events
-            video.addEventListener('ended', handleEnd);
+            video.addEventListener('ended', handleEnd, { once: true });
+            
             video.addEventListener('error', (e) => {
-                if (onError) onError(new Error(`Video playback error: ${e.message || 'Unknown error'}`));
+                const errorMsg = `Video playback error: ${video.error?.message || 'Unknown error'}`;
+                console.error(errorMsg, e);
+                console.error('Video error details:', video.error);
+                if (onError) onError(new Error(errorMsg));
+            });
+            
+            video.addEventListener('canplay', () => {
+                console.log(`Video ready to play: ${cue.name}`);
+            }, { once: true });
+
+            video.addEventListener('loadstart', () => {
+                console.log(`Video loading started: ${cue.name}`);
             });
             
             // Handle end time
-            if (cue.endTime) {
+            if (cue.endTime && cue.endTime > 0) {
                 video.addEventListener('timeupdate', () => {
                     if (video.currentTime >= (cue.endTime / 1000)) {
                         video.pause();
@@ -152,8 +197,20 @@ class VideoEngine {
                 this.showVideoInPreview(video);
             }
             
-            // Start playback
-            await video.play();
+            // Load and start playback
+            video.load();
+            try {
+                const playPromise = video.play();
+                if (playPromise !== undefined) {
+                    await playPromise;
+                }
+                console.log(`Video playback started successfully: ${cue.name}`);
+            } catch (playError) {
+                console.error('Video play() failed:', playError);
+                // Remove from active videos on failure
+                this.activeVideos.delete(cue.id);
+                if (onError) onError(playError);
+            }
             
         } catch (error) {
             console.error('Video playback error:', error);
@@ -185,17 +242,16 @@ class VideoEngine {
         const previewContainer = document.querySelector('.video-preview-container');
         const videoSection = document.getElementById('video-preview-section');
         
-        // Clear existing preview
-        const existingVideo = previewContainer.querySelector('video:not(#video-preview)');
-        if (existingVideo) {
-            existingVideo.remove();
-        }
+        // Clear existing preview videos (but keep the preview element)
+        const existingVideos = previewContainer.querySelectorAll('video:not(#video-preview)');
+        existingVideos.forEach(v => v.remove());
         
         // Style the video for preview
         video.style.maxWidth = '100%';
         video.style.maxHeight = '100%';
         video.style.borderRadius = '4px';
         video.controls = true;
+        video.id = 'playing-video-preview';
         
         // Add to preview container
         previewContainer.appendChild(video);
@@ -265,12 +321,18 @@ class VideoEngine {
         const videoSection = document.getElementById('video-preview-section');
         const previewContainer = document.querySelector('.video-preview-container');
         
-        // Remove any playing videos in preview
+        // Remove any playing videos in preview (but keep the preview element)
         const playingVideos = previewContainer.querySelectorAll('video:not(#video-preview)');
         playingVideos.forEach(video => {
             video.pause();
             video.remove();
         });
+        
+        // Reset the preview video element
+        if (this.videoPreview) {
+            this.videoPreview.src = '';
+            this.videoPreview.load();
+        }
         
         // Hide section
         videoSection.style.display = 'none';
@@ -289,6 +351,7 @@ class VideoEngine {
     }
 
     stopAllCues() {
+        console.log('Stopping all video cues');
         for (const [cueId, videoData] of this.activeVideos) {
             try {
                 videoData.video.pause();
@@ -316,7 +379,7 @@ class VideoEngine {
     // Get video file metadata
     async getVideoFileInfo(filePath) {
         try {
-            const videoUrl = await this.loadVideoFile(filePath);
+            const videoUrl = this.getFileUrl(filePath);
             
             return new Promise((resolve, reject) => {
                 const video = document.createElement('video');
@@ -331,10 +394,11 @@ class VideoEngine {
                 });
                 
                 video.addEventListener('error', (e) => {
-                    reject(new Error(`Could not load video metadata: ${e.message || 'Unknown error'}`));
+                    reject(new Error(`Could not load video metadata: ${video.error?.message || 'Unknown error'}`));
                 });
                 
                 video.src = videoUrl;
+                video.load();
             });
         } catch (error) {
             console.error('Failed to get video file info:', error);
@@ -369,8 +433,9 @@ class VideoEngine {
 
     // Preview video in inspector
     previewVideoInInspector(filePath) {
-        if (this.videoPreview) {
-            this.videoPreview.src = filePath;
+        if (this.videoPreview && filePath) {
+            const videoUrl = this.getFileUrl(filePath);
+            this.videoPreview.src = videoUrl;
             const videoSection = document.getElementById('video-preview-section');
             videoSection.style.display = 'flex';
         }
