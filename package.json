@@ -1,22 +1,31 @@
 {
   "name": "qlabclone",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Cross-platform QLab clone for show control and media playback",
+  "main": "main.js",
   "scripts": {
+    "start": "electron . --no-sandbox",
+    "start-vm": "DISPLAY=:0 electron . --no-sandbox",
+    "start-headless": "xvfb-run -a electron . --no-sandbox",
+    "dev": "nodemon --exec 'electron . --no-sandbox'",
+    "dev-vm": "nodemon --exec 'DISPLAY=:0 electron . --no-sandbox'",
+    "dev-headless": "nodemon --exec 'xvfb-run -a electron . --no-sandbox'",
+    "sync-and-start": "rsync -av --exclude node_modules . ../local-copy/ && cd ../local-copy && npm start",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/coxyDev/QLabClone.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/coxyDev/QLabClone/issues"
-  },
-  "homepage": "https://github.com/coxyDev/QLabClone#readme",
-  "description": "",
+  "keywords": [
+    "qlab",
+    "show-control",
+    "audio",
+    "theater",
+    "electron"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
   "devDependencies": {
     "concurrently": "^9.1.2",
     "electron": "^36.3.2",
@@ -29,5 +38,32 @@
     "fs-extra": "^11.3.0",
     "sqlite3": "^5.1.7",
     "uuid": "^11.1.0"
+  },
+  "build": {
+    "appId": "com.yourname.qlabclone",
+    "productName": "QLab Clone",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "AudioVideo"
+    }
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
