@@ -200,23 +200,37 @@ body {
     height: 100%;
     background: rgba(0, 0, 0, 0.8);
     z-index: 1000;
-    display: none;
+    display: none !important; /* Force hidden by default */
     align-items: center;
     justify-content: center;
+    backdrop-filter: blur(2px);
 }
 
 .modal.show {
-    display: flex;
+    display: flex !important; /* Force visible when show class is added */
 }
 
 .modal-content {
     background: #2d2d2d;
     border-radius: 8px;
     width: 90%;
-    max-width: 600px;
-    max-height: 80vh;
+    max-width: 700px;
+    max-height: 85vh;
     overflow-y: auto;
     border: 1px solid #404040;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .modal-header {
@@ -532,10 +546,18 @@ body {
     color: #888;
 }
 
-.cue-status.loading { color: #ffc107; }
+.cue-status.loading { 
+    color: #ffc107; 
+    animation: pulse 1s ease-in-out infinite alternate;
+}
 .cue-status.ready { color: #28a745; }
 .cue-status.error { color: #dc3545; }
 .cue-status.playing { color: #17a2b8; }
+
+@keyframes pulse {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+}
 
 /* Inspector */
 .inspector-content {

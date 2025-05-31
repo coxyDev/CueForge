@@ -8,6 +8,10 @@ class UIManager {
         this.initializeElements();
         this.bindEvents();
         this.setupMenuHandlers();
+        
+        // Hide settings modal on startup
+        this.ensureSettingsModalHidden();
+        
         this.updateUI();
         
         // Update time display
@@ -15,6 +19,15 @@ class UIManager {
         
         // Initialize master volume control
         this.setupMasterVolumeControl();
+    }
+
+    ensureSettingsModalHidden() {
+        // Ensure settings modal is properly hidden on startup
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal) {
+            settingsModal.style.display = 'none';
+            settingsModal.classList.remove('show');
+        }
     }
 
     initializeElements() {
@@ -123,6 +136,7 @@ class UIManager {
         this.cueManager.on('selectionChanged', (data) => this.onSelectionChanged(data));
         this.cueManager.on('playbackStateChanged', (data) => this.onPlaybackStateChanged(data));
         this.cueManager.on('showChanged', (data) => this.onShowChanged(data));
+        this.cueManager.on('settingsChanged', (data) => this.onSettingsChanged(data));
     }
 
     setupMenuHandlers() {
@@ -311,6 +325,12 @@ class UIManager {
             this.renderCueList();
         }
         this.updateCueCount();
+    }
+
+    onSettingsChanged(data) {
+        // Update UI elements when settings change
+        console.log('Settings changed:', data);
+        this.updateTransportControls();
     }
 
     // UI update methods
@@ -996,14 +1016,8 @@ class UIManager {
         this.elements.settingsModal.style.display = 'flex';
         this.elements.settingsModal.classList.add('show');
         
-        if (window.displayManager) {
-            await this.loadDisplaySettings();
-        } else {
-            const displaysList = document.getElementById('displays-list');
-            if (displaysList) {
-                displaysList.innerHTML = '<p>Display manager not available</p>';
-            }
-        }
+        // Load settings immediately when opening
+        await this.loadDisplaySettings();
     }
 
     closeSettings() {
@@ -1013,43 +1027,61 @@ class UIManager {
 
     async loadDisplaySettings() {
         try {
-            // Refresh displays
-            await window.displayManager.detectDisplays();
-            const displays = window.displayManager.getDisplays();
+            // Load playback settings first
+            const singleCueModeCheckbox = document.getElementById('single-cue-mode');
+            const autoContinueCheckbox = document.getElementById('auto-continue-enabled');
             
-            // Update displays list
-            const displaysList = document.getElementById('displays-list');
-            if (displaysList) {
-                if (displays.length === 0) {
-                    displaysList.innerHTML = '<p>No external displays detected</p>';
-                } else {
-                    displaysList.innerHTML = displays.map(display => `
-                        <div class="display-item ${display.primary ? 'display-primary' : ''}">
-                            <h4>${display.name}</h4>
-                            <div class="display-info">
-                                Resolution: ${display.resolution}<br>
-                                ${display.primary ? 'Primary Display' : 'Secondary Display'}
-                            </div>
-                        </div>
-                    `).join('');
-                }
+            if (singleCueModeCheckbox) {
+                singleCueModeCheckbox.checked = this.cueManager.getSingleCueMode();
+            }
+            if (autoContinueCheckbox) {
+                autoContinueCheckbox.checked = this.cueManager.getAutoContinueEnabled();
             }
             
-            // Update routing options
-            const routingSelect = document.getElementById('video-routing');
-            if (routingSelect) {
-                const routingOptions = window.displayManager.getRoutingOptions();
-                const currentRouting = window.displayManager.getCurrentRouting();
+            // Refresh displays
+            if (window.displayManager) {
+                await window.displayManager.detectDisplays();
+                const displays = window.displayManager.getDisplays();
                 
-                routingSelect.innerHTML = routingOptions.map(option => 
-                    `<option value="${option.id}" ${option.id.toString() === currentRouting.toString() ? 'selected' : ''}>
-                        ${option.name} ${option.resolution ? `(${option.resolution})` : ''}
-                    </option>`
-                ).join('');
+                // Update displays list
+                const displaysList = document.getElementById('displays-list');
+                if (displaysList) {
+                    if (displays.length === 0) {
+                        displaysList.innerHTML = '<p>No external displays detected</p>';
+                    } else {
+                        displaysList.innerHTML = displays.map(display => `
+                            <div class="display-item ${display.primary ? 'display-primary' : ''}">
+                                <h4>${display.name}</h4>
+                                <div class="display-info">
+                                    Resolution: ${display.resolution}<br>
+                                    ${display.primary ? 'Primary Display' : 'Secondary Display'}
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                }
                 
-                // Update status bar
-                const selectedOption = routingOptions.find(opt => opt.id.toString() === currentRouting.toString());
-                this.elements.displayRouting.textContent = `Video: ${selectedOption ? selectedOption.name : 'Unknown'}`;
+                // Update routing options
+                const routingSelect = document.getElementById('video-routing');
+                if (routingSelect) {
+                    const routingOptions = window.displayManager.getRoutingOptions();
+                    const currentRouting = window.displayManager.getCurrentRouting();
+                    
+                    routingSelect.innerHTML = routingOptions.map(option => 
+                        `<option value="${option.id}" ${option.id.toString() === currentRouting.toString() ? 'selected' : ''}>
+                            ${option.name} ${option.resolution ? `(${option.resolution})` : ''}
+                        </option>`
+                    ).join('');
+                    
+                    // Update status bar
+                    const selectedOption = routingOptions.find(opt => opt.id.toString() === currentRouting.toString());
+                    this.elements.displayRouting.textContent = `Video: ${selectedOption ? selectedOption.name : 'Unknown'}`;
+                }
+            } else {
+                const displaysList = document.getElementById('displays-list');
+                if (displaysList) {
+                    displaysList.innerHTML = '<p>Display manager not available</p>';
+                }
             }
             
             // Set up event handlers
@@ -1061,13 +1093,35 @@ class UIManager {
     }
 
     setupSettingsEventHandlers() {
+        // Playback settings
+        const singleCueModeCheckbox = document.getElementById('single-cue-mode');
+        const autoContinueCheckbox = document.getElementById('auto-continue-enabled');
+        
+        // Display settings  
         const routingSelect = document.getElementById('video-routing');
         const testPatternBtn = document.getElementById('test-pattern-btn');
         const clearDisplaysBtn = document.getElementById('clear-displays-btn');
         const refreshDisplaysBtn = document.getElementById('refresh-displays');
         const applySettingsBtn = document.getElementById('apply-settings');
         
-        // Remove existing listeners by cloning elements
+        // Handle playback settings
+        if (singleCueModeCheckbox) {
+            const newSingleCueModeCheckbox = singleCueModeCheckbox.cloneNode(true);
+            singleCueModeCheckbox.parentNode.replaceChild(newSingleCueModeCheckbox, singleCueModeCheckbox);
+            newSingleCueModeCheckbox.addEventListener('change', (e) => {
+                this.cueManager.setSingleCueMode(e.target.checked);
+            });
+        }
+        
+        if (autoContinueCheckbox) {
+            const newAutoContinueCheckbox = autoContinueCheckbox.cloneNode(true);
+            autoContinueCheckbox.parentNode.replaceChild(newAutoContinueCheckbox, autoContinueCheckbox);
+            newAutoContinueCheckbox.addEventListener('change', (e) => {
+                this.cueManager.setAutoContinueEnabled(e.target.checked);
+            });
+        }
+        
+        // Remove existing listeners by cloning elements (display settings)
         if (routingSelect) {
             const newRoutingSelect = routingSelect.cloneNode(true);
             routingSelect.parentNode.replaceChild(newRoutingSelect, routingSelect);
@@ -1089,9 +1143,9 @@ class UIManager {
             applySettingsBtn.parentNode.replaceChild(newApplySettingsBtn, applySettingsBtn);
         }
         
-        // Re-get elements and add listeners
+        // Re-get elements and add listeners (display settings)
         const newRoutingSelect = document.getElementById('video-routing');
-        if (newRoutingSelect) {
+        if (newRoutingSelect && window.displayManager) {
             newRoutingSelect.addEventListener('change', async (e) => {
                 const success = await window.displayManager.setVideoRouting(e.target.value);
                 if (success) {
@@ -1102,14 +1156,14 @@ class UIManager {
         }
         
         const newTestPatternBtn = document.getElementById('test-pattern-btn');
-        if (newTestPatternBtn) {
+        if (newTestPatternBtn && window.displayManager) {
             newTestPatternBtn.addEventListener('click', async () => {
                 await window.displayManager.showTestPattern();
             });
         }
         
         const newClearDisplaysBtn = document.getElementById('clear-displays-btn');
-        if (newClearDisplaysBtn) {
+        if (newClearDisplaysBtn && window.displayManager) {
             newClearDisplaysBtn.addEventListener('click', async () => {
                 await window.displayManager.clearAllDisplays();
             });

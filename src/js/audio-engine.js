@@ -170,33 +170,104 @@ class AudioEngine {
     }
 
     stopCue(cueId) {
+        console.log(`Stopping audio cue: ${cueId}`);
         const audioData = this.activeSounds.get(cueId);
         if (audioData) {
             try {
                 if (audioData.audio) {
+                    // Proper stop: pause and reset to beginning
                     audioData.audio.pause();
                     audioData.audio.currentTime = 0;
+                    console.log(`Audio cue ${cueId} stopped and reset to beginning`);
                 }
+                // Call completion handler to clean up
                 audioData.onComplete();
             } catch (error) {
                 console.warn('Error stopping audio cue:', error);
+                // Still remove from active sounds even if stop failed
+                this.activeSounds.delete(cueId);
             }
+        } else {
+            console.log(`Audio cue ${cueId} not found in active sounds`);
+        }
+    }
+
+    pauseCue(cueId) {
+        console.log(`Pausing audio cue: ${cueId}`);
+        const audioData = this.activeSounds.get(cueId);
+        if (audioData && audioData.audio) {
+            try {
+                audioData.audio.pause();
+                console.log(`Audio cue ${cueId} paused at ${audioData.audio.currentTime}s`);
+            } catch (error) {
+                console.warn('Error pausing audio cue:', error);
+            }
+        } else {
+            console.log(`Audio cue ${cueId} not found in active sounds`);
+        }
+    }
+
+    resumeCue(cueId) {
+        console.log(`Resuming audio cue: ${cueId}`);
+        const audioData = this.activeSounds.get(cueId);
+        if (audioData && audioData.audio) {
+            try {
+                const playPromise = audioData.audio.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log(`Audio cue ${cueId} resumed from ${audioData.audio.currentTime}s`);
+                    }).catch(error => {
+                        console.warn('Error resuming audio cue:', error);
+                    });
+                }
+            } catch (error) {
+                console.warn('Error resuming audio cue:', error);
+            }
+        } else {
+            console.log(`Audio cue ${cueId} not found in active sounds`);
         }
     }
 
     stopAllCues() {
-        console.log('Stopping all audio cues');
+        console.log(`Stopping all audio cues (${this.activeSounds.size} active)`);
         for (const [cueId, audioData] of this.activeSounds) {
             try {
                 if (audioData.audio) {
                     audioData.audio.pause();
                     audioData.audio.currentTime = 0;
+                    // Set src to empty to fully stop streaming (for radio streams, etc.)
+                    audioData.audio.src = '';
+                    audioData.audio.load(); // Reset the audio element
+                    console.log(`Audio cue ${cueId} fully stopped`);
                 }
             } catch (error) {
                 console.warn('Error stopping cue:', cueId, error);
             }
         }
         this.activeSounds.clear();
+        console.log('All audio cues stopped and cleared');
+    }
+
+    // Check if any audio is currently playing
+    hasActiveCues() {
+        return this.activeSounds.size > 0;
+    }
+
+    // Get detailed status of all active cues
+    getPlaybackStatus() {
+        const status = {};
+        for (const [cueId, audioData] of this.activeSounds) {
+            if (audioData.audio) {
+                status[cueId] = {
+                    paused: audioData.audio.paused,
+                    currentTime: audioData.audio.currentTime,
+                    duration: audioData.audio.duration,
+                    volume: audioData.audio.volume,
+                    muted: audioData.audio.muted
+                };
+            }
+        }
+        return status;
     }
 
     setMasterVolume(volume) {

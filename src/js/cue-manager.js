@@ -12,6 +12,7 @@ class CueManager {
         this.unsavedChanges = false;
         this.masterVolume = 1.0;
         this.autoContinueEnabled = true; // Global auto-continue setting
+        this.singleCueMode = true; // NEW: Prevent multiple cues from playing simultaneously
         
         this.listeners = {
             cueAdded: [],
@@ -20,7 +21,8 @@ class CueManager {
             selectionChanged: [],
             playbackStateChanged: [],
             showChanged: [],
-            volumeChanged: []
+            volumeChanged: [],
+            settingsChanged: []
         };
     }
 
@@ -610,13 +612,14 @@ class CueManager {
     async saveShow(filePath = null) {
         const showData = {
             name: this.showName,
-            version: '1.1', // Updated version for new features
+            version: '1.2', // Updated version for new settings
             created: new Date().toISOString(),
             cues: this.cues,
             settings: {
                 currentCueIndex: this.currentCueIndex,
                 masterVolume: this.masterVolume,
-                autoContinueEnabled: this.autoContinueEnabled
+                autoContinueEnabled: this.autoContinueEnabled,
+                singleCueMode: this.singleCueMode
             }
         };
 
@@ -657,6 +660,7 @@ class CueManager {
                 this.currentCueIndex = showData.settings?.currentCueIndex || -1;
                 this.masterVolume = showData.settings?.masterVolume || 1.0;
                 this.autoContinueEnabled = showData.settings?.autoContinueEnabled !== false;
+                this.singleCueMode = showData.settings?.singleCueMode !== false; // Default to true for safety
                 this.showName = showData.name || require('path').basename(filePath, '.qlab');
                 this.showPath = filePath;
                 this.selectedCueId = null;
@@ -673,6 +677,12 @@ class CueManager {
                     loaded: true,
                     cues: this.cues
                 });
+                
+                this.emit('settingsChanged', {
+                    singleCueMode: this.singleCueMode,
+                    autoContinueEnabled: this.autoContinueEnabled
+                });
+                
                 return true;
             }
         } catch (error) {

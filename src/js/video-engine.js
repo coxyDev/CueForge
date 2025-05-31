@@ -339,24 +339,76 @@ class VideoEngine {
     }
 
     stopCue(cueId) {
+        console.log(`Stopping video cue: ${cueId}`);
         const videoData = this.activeVideos.get(cueId);
         if (videoData) {
             try {
-                videoData.video.pause();
+                if (videoData.video) {
+                    // Proper stop: pause and reset to beginning
+                    videoData.video.pause();
+                    videoData.video.currentTime = 0;
+                    console.log(`Video cue ${cueId} stopped and reset to beginning`);
+                }
+                // Call completion handler to clean up
                 videoData.onComplete();
             } catch (error) {
                 console.warn('Error stopping video cue:', error);
+                // Still remove from active videos even if stop failed
+                this.activeVideos.delete(cueId);
             }
+        } else {
+            console.log(`Video cue ${cueId} not found in active videos`);
+        }
+    }
+
+    pauseCue(cueId) {
+        console.log(`Pausing video cue: ${cueId}`);
+        const videoData = this.activeVideos.get(cueId);
+        if (videoData && videoData.video) {
+            try {
+                videoData.video.pause();
+                console.log(`Video cue ${cueId} paused at ${videoData.video.currentTime}s`);
+            } catch (error) {
+                console.warn('Error pausing video cue:', error);
+            }
+        } else {
+            console.log(`Video cue ${cueId} not found in active videos`);
+        }
+    }
+
+    resumeCue(cueId) {
+        console.log(`Resuming video cue: ${cueId}`);
+        const videoData = this.activeVideos.get(cueId);
+        if (videoData && videoData.video) {
+            try {
+                const playPromise = videoData.video.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log(`Video cue ${cueId} resumed from ${videoData.video.currentTime}s`);
+                    }).catch(error => {
+                        console.warn('Error resuming video cue:', error);
+                    });
+                }
+            } catch (error) {
+                console.warn('Error resuming video cue:', error);
+            }
+        } else {
+            console.log(`Video cue ${cueId} not found in active videos`);
         }
     }
 
     stopAllCues() {
-        console.log('Stopping all video cues');
+        console.log(`Stopping all video cues (${this.activeVideos.size} active)`);
         for (const [cueId, videoData] of this.activeVideos) {
             try {
-                videoData.video.pause();
-                if (videoData.video.parentNode) {
-                    videoData.video.parentNode.removeChild(videoData.video);
+                if (videoData.video) {
+                    videoData.video.pause();
+                    videoData.video.currentTime = 0;
+                    // Remove video element from DOM to fully stop
+                    if (videoData.video.parentNode) {
+                        videoData.video.parentNode.removeChild(videoData.video);
+                    }
+                    console.log(`Video cue ${cueId} fully stopped and removed`);
                 }
             } catch (error) {
                 console.warn('Error stopping video cue:', cueId, error);
@@ -365,6 +417,29 @@ class VideoEngine {
         this.activeVideos.clear();
         this.hideVideoPreview();
         this.exitFullscreen();
+        console.log('All video cues stopped and cleared');
+    }
+
+    // Check if any video is currently playing
+    hasActiveCues() {
+        return this.activeVideos.size > 0;
+    }
+
+    // Get detailed status of all active cues
+    getPlaybackStatus() {
+        const status = {};
+        for (const [cueId, videoData] of this.activeVideos) {
+            if (videoData.video) {
+                status[cueId] = {
+                    paused: videoData.video.paused,
+                    currentTime: videoData.video.currentTime,
+                    duration: videoData.video.duration,
+                    volume: videoData.video.volume,
+                    muted: videoData.video.muted
+                };
+            }
+        }
+        return status;
     }
 
     isPlaying(cueId) {
