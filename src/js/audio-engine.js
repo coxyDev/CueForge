@@ -4,6 +4,7 @@ class AudioEngine {
         this.masterGain = null;
         this.activeSounds = new Map(); // cueId -> audio data
         this.initialized = false;
+        this.masterVolume = 1.0;
         
         this.initializeAudioContext();
     }
@@ -16,6 +17,7 @@ class AudioEngine {
             // Create master gain node
             this.masterGain = this.audioContext.createGain();
             this.masterGain.connect(this.audioContext.destination);
+            this.masterGain.gain.value = this.masterVolume;
             
             // Handle suspend/resume for browser policies
             if (this.audioContext.state === 'suspended') {
@@ -89,10 +91,19 @@ class AudioEngine {
             // Use HTML5 Audio element
             const audio = new Audio();
             
-            // Set properties before setting src
-            audio.volume = Math.max(0, Math.min(1, cue.volume || 1.0));
+            // Calculate final volume (cue volume * master volume)
+            const finalVolume = Math.max(0, Math.min(1, (cue.volume || 1.0) * this.masterVolume));
+            audio.volume = finalVolume;
             audio.loop = cue.loop || false;
             audio.preload = 'auto';
+            
+            // Store original cue volume for later adjustments
+            const audioData = {
+                audio: audio,
+                cueVolume: cue.volume || 1.0,
+                gainNode: null,
+                onComplete: null
+            };
             
             // Handle start time
             if (cue.startTime > 0) {
@@ -112,6 +123,9 @@ class AudioEngine {
                 }
             };
             
+            audioData.onComplete = handleEnd;
+            
+            // Handle video events
             audio.addEventListener('ended', handleEnd, { once: true });
             
             audio.addEventListener('error', (e) => {
@@ -139,11 +153,33 @@ class AudioEngine {
                 });
             }
             
-            // Store reference for potential stopping
-            this.activeSounds.set(cue.id, {
-                audio: audio,
-                onComplete: handleEnd
-            });
+            // Handle fade in
+            if (cue.fadeIn > 0) {
+                audio.volume = 0;
+                const fadeInStep = finalVolume / (cue.fadeIn / 50); // 50ms steps
+                const fadeInInterval = setInterval(() => {
+                    if (audio.volume < finalVolume) {
+                        audio.volume = Math.min(finalVolume, audio.volume + fadeInStep);
+                    } else {
+                        clearInterval(fadeInInterval);
+                    }
+                }, 50);
+                audioData.fadeInInterval = fadeInInterval;
+            }
+            
+            // Handle fade out
+            if (cue.fadeOut > 0 && cue.endTime) {
+                const fadeOutStart = (cue.endTime - cue.fadeOut) / 1000;
+                audio.addEventListener('timeupdate', () => {
+                    if (audio.currentTime >= fadeOutStart) {
+                        const fadeProgress = (audio.currentTime - fadeOutStart) / (cue.fadeOut / 1000);
+                        audio.volume = Math.max(0, finalVolume * (1 - fadeProgress));
+                    }
+                });
+            }
+            
+            // Store reference
+            this.activeSounds.set(cue.id, audioData);
             
             // Set the source and load
             audio.src = audioUrl;
@@ -169,12 +205,43 @@ class AudioEngine {
         }
     }
 
+    // Set volume for a specific cue
+    setCueVolume(cueId, volume) {
+        const audioData = this.activeSounds.get(cueId);
+        if (audioData && audioData.audio) {
+            // Store the new cue volume
+            audioData.cueVolume = Math.max(0, Math.min(1, volume));
+            
+            // Apply volume (cue volume * master volume)
+            const finalVolume = audioData.cueVolume * this.masterVolume;
+            audioData.audio.volume = finalVolume;
+            
+            console.log(`Set volume for cue ${cueId}: ${Math.round(audioData.cueVolume * 100)}% (final: ${Math.round(finalVolume * 100)}%)`);
+            return true;
+        }
+        return false;
+    }
+
+    // Get volume for a specific cue
+    getCueVolume(cueId) {
+        const audioData = this.activeSounds.get(cueId);
+        if (audioData) {
+            return audioData.cueVolume;
+        }
+        return null;
+    }
+
     stopCue(cueId) {
         console.log(`Stopping audio cue: ${cueId}`);
         const audioData = this.activeSounds.get(cueId);
         if (audioData) {
             try {
                 if (audioData.audio) {
+                    // Clear any fade intervals
+                    if (audioData.fadeInInterval) {
+                        clearInterval(audioData.fadeInInterval);
+                    }
+                    
                     // Proper stop: pause and reset to beginning
                     audioData.audio.pause();
                     audioData.audio.currentTime = 0;
@@ -233,6 +300,11 @@ class AudioEngine {
         for (const [cueId, audioData] of this.activeSounds) {
             try {
                 if (audioData.audio) {
+                    // Clear any fade intervals
+                    if (audioData.fadeInInterval) {
+                        clearInterval(audioData.fadeInInterval);
+                    }
+                    
                     audioData.audio.pause();
                     audioData.audio.currentTime = 0;
                     // Set src to empty to fully stop streaming (for radio streams, etc.)
@@ -246,6 +318,30 @@ class AudioEngine {
         }
         this.activeSounds.clear();
         console.log('All audio cues stopped and cleared');
+    }
+
+    // Master volume control
+    setMasterVolume(volume) {
+        this.masterVolume = Math.max(0, Math.min(1, volume));
+        
+        // Update master gain node if using Web Audio API
+        if (this.masterGain) {
+            this.masterGain.gain.value = this.masterVolume;
+        }
+        
+        // Update all currently playing audio volumes
+        for (const [cueId, audioData] of this.activeSounds) {
+            if (audioData.audio) {
+                const finalVolume = audioData.cueVolume * this.masterVolume;
+                audioData.audio.volume = finalVolume;
+            }
+        }
+        
+        console.log(`Master audio volume set to: ${Math.round(this.masterVolume * 100)}%`);
+    }
+
+    getMasterVolume() {
+        return this.masterVolume;
     }
 
     // Check if any audio is currently playing
@@ -263,21 +359,12 @@ class AudioEngine {
                     currentTime: audioData.audio.currentTime,
                     duration: audioData.audio.duration,
                     volume: audioData.audio.volume,
+                    cueVolume: audioData.cueVolume,
                     muted: audioData.audio.muted
                 };
             }
         }
         return status;
-    }
-
-    setMasterVolume(volume) {
-        if (this.masterGain) {
-            this.masterGain.gain.value = Math.max(0, Math.min(1, volume));
-        }
-    }
-
-    getMasterVolume() {
-        return this.masterGain ? this.masterGain.gain.value : 1.0;
     }
 
     isPlaying(cueId) {

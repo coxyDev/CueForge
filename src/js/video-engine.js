@@ -4,6 +4,7 @@ class VideoEngine {
         this.videoPreview = null;
         this.fullscreenVideo = null;
         this.initialized = false;
+        this.masterVolume = 1.0;
         
         this.initializeVideoEngine();
     }
@@ -104,9 +105,22 @@ class VideoEngine {
             // Create video element for playback
             const video = document.createElement('video');
             video.src = videoUrl;
-            video.volume = Math.max(0, Math.min(1, cue.volume || 1.0));
+            
+            // Calculate final volume (cue volume * master volume)
+            const cueVolume = Math.max(0, Math.min(1, cue.volume || 1.0));
+            const finalVolume = cueVolume * this.masterVolume;
+            video.volume = finalVolume;
+            
             video.loop = cue.loop || false;
             video.preload = 'auto';
+            
+            // Store video data with volume info
+            const videoData = {
+                video: video,
+                cue: cue,
+                cueVolume: cueVolume,
+                onComplete: null
+            };
             
             // Set start time
             if (cue.startTime && cue.startTime > 0) {
@@ -143,6 +157,8 @@ class VideoEngine {
                     if (onComplete) onComplete();
                 }
             };
+            
+            videoData.onComplete = handleEnd;
             
             // Handle video events
             video.addEventListener('ended', handleEnd, { once: true });
@@ -184,11 +200,7 @@ class VideoEngine {
             }
             
             // Store reference
-            this.activeVideos.set(cue.id, {
-                video,
-                cue,
-                onComplete: handleEnd
-            });
+            this.activeVideos.set(cue.id, videoData);
             
             // Show video based on fullscreen setting
             if (cue.fullscreen) {
@@ -216,6 +228,51 @@ class VideoEngine {
             console.error('Video playback error:', error);
             if (onError) onError(error);
         }
+    }
+
+    // Set volume for a specific cue
+    setCueVolume(cueId, volume) {
+        const videoData = this.activeVideos.get(cueId);
+        if (videoData && videoData.video) {
+            // Store the new cue volume
+            videoData.cueVolume = Math.max(0, Math.min(1, volume));
+            
+            // Apply volume (cue volume * master volume)
+            const finalVolume = videoData.cueVolume * this.masterVolume;
+            videoData.video.volume = finalVolume;
+            
+            console.log(`Set video volume for cue ${cueId}: ${Math.round(videoData.cueVolume * 100)}% (final: ${Math.round(finalVolume * 100)}%)`);
+            return true;
+        }
+        return false;
+    }
+
+    // Get volume for a specific cue
+    getCueVolume(cueId) {
+        const videoData = this.activeVideos.get(cueId);
+        if (videoData) {
+            return videoData.cueVolume;
+        }
+        return null;
+    }
+
+    // Master volume control
+    setMasterVolume(volume) {
+        this.masterVolume = Math.max(0, Math.min(1, volume));
+        
+        // Update all currently playing video volumes
+        for (const [cueId, videoData] of this.activeVideos) {
+            if (videoData.video) {
+                const finalVolume = videoData.cueVolume * this.masterVolume;
+                videoData.video.volume = finalVolume;
+            }
+        }
+        
+        console.log(`Master video volume set to: ${Math.round(this.masterVolume * 100)}%`);
+    }
+
+    getMasterVolume() {
+        return this.masterVolume;
     }
 
     setVideoAspectRatio(video, aspectRatio) {
@@ -435,6 +492,7 @@ class VideoEngine {
                     currentTime: videoData.video.currentTime,
                     duration: videoData.video.duration,
                     volume: videoData.video.volume,
+                    cueVolume: videoData.cueVolume,
                     muted: videoData.video.muted
                 };
             }

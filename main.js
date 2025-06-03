@@ -2,6 +2,8 @@ const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron'
 const path = require('path');
 const fs = require('fs-extra');
 
+app.disableHardwareAcceleration();
+
 // Keep a global reference of the window objects
 let mainWindow;
 let displayWindows = new Map(); // windowId -> BrowserWindow

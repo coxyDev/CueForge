@@ -8,6 +8,7 @@ class UIManager {
         this.initializeElements();
         this.bindEvents();
         this.setupMenuHandlers();
+        this.setupGlobalKeyHandler();
         
         // Hide settings modal on startup
         this.ensureSettingsModalHidden();
@@ -22,7 +23,6 @@ class UIManager {
     }
 
     ensureSettingsModalHidden() {
-        // Ensure settings modal is properly hidden on startup
         const settingsModal = document.getElementById('settings-modal');
         if (settingsModal) {
             settingsModal.style.display = 'none';
@@ -30,45 +30,102 @@ class UIManager {
         }
     }
 
+    setupGlobalKeyHandler() {
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' || e.code === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('ESC pressed - emergency stop');
+                this.cueManager.stop();
+                return;
+            }
+            
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                return;
+            }
+            
+            this.handleGlobalKeydown(e);
+        }, true);
+    }
+
+    handleGlobalKeydown(e) {
+        switch (e.code) {
+            case 'Space':
+                e.preventDefault();
+                console.log('Space pressed - GO');
+                this.cueManager.go();
+                break;
+            case 'Delete':
+            case 'Backspace':
+                e.preventDefault();
+                this.deleteSelectedCue();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                this.selectPreviousCue();
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                this.selectNextCue();
+                break;
+            case 'KeyS':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    this.cueManager.saveShow();
+                }
+                break;
+            case 'KeyN':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    this.cueManager.newShow();
+                }
+                break;
+            case 'Period':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    console.log('Ctrl+. pressed - STOP');
+                    this.cueManager.stop();
+                }
+                break;
+            case 'KeyP':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    console.log('Ctrl+P pressed - PAUSE');
+                    this.cueManager.pause();
+                }
+                break;
+        }
+    }
+
     initializeElements() {
-        // Cache frequently used elements
         this.elements = {
-            // Header elements
             showName: document.getElementById('show-name'),
             showStatus: document.getElementById('show-status'),
-            
-            // Transport controls
             goBtn: document.getElementById('go-btn'),
             stopBtn: document.getElementById('stop-btn'),
             pauseBtn: document.getElementById('pause-btn'),
-            
-            // Cue list elements
             cueList: document.getElementById('cue-list'),
             cueCount: document.getElementById('cue-count'),
-            
-            // Cue control buttons
             addAudioCue: document.getElementById('add-audio-cue'),
             addVideoCue: document.getElementById('add-video-cue'),
             addWaitCue: document.getElementById('add-wait-cue'),
             addGroupCue: document.getElementById('add-group-cue'),
             deleteCue: document.getElementById('delete-cue'),
-            
-            // Settings
             settingsBtn: document.getElementById('settings-btn'),
             settingsModal: document.getElementById('settings-modal'),
             closeSettings: document.getElementById('close-settings'),
-            
-            // Inspector
             inspectorContent: document.getElementById('inspector-content'),
-            
-            // Status bar
             currentTime: document.getElementById('current-time'),
             displayRouting: document.getElementById('display-routing')
         };
     }
 
     setupMasterVolumeControl() {
-        // Create master volume control in the header
+        const existingControl = document.querySelector('.master-volume-control');
+        if (existingControl) {
+            existingControl.remove();
+        }
+        
         const volumeControl = document.createElement('div');
         volumeControl.className = 'master-volume-control';
         volumeControl.innerHTML = `
@@ -77,59 +134,56 @@ class UIManager {
             <span id="master-volume-display">${Math.round(this.cueManager.getMasterVolume() * 100)}%</span>
         `;
         
-        // Insert after transport controls
         const transportControls = document.querySelector('.transport-controls');
-        transportControls.appendChild(volumeControl);
+        if (transportControls) {
+            transportControls.appendChild(volumeControl);
+        }
         
-        // Bind volume control events
         const volumeSlider = document.getElementById('master-volume');
         const volumeDisplay = document.getElementById('master-volume-display');
         
-        volumeSlider.addEventListener('input', (e) => {
-            const volume = parseFloat(e.target.value);
-            volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
-        });
+        if (volumeSlider && volumeDisplay) {
+            volumeSlider.addEventListener('input', (e) => {
+                const volume = parseFloat(e.target.value);
+                volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
+            });
+            
+            volumeSlider.addEventListener('change', (e) => {
+                const volume = parseFloat(e.target.value);
+                this.cueManager.setMasterVolume(volume);
+            });
+        }
         
-        volumeSlider.addEventListener('change', (e) => {
-            const volume = parseFloat(e.target.value);
-            this.cueManager.setMasterVolume(volume);
-        });
-        
-        // Update volume control when master volume changes
         this.cueManager.on('volumeChanged', (data) => {
-            volumeSlider.value = data.masterVolume;
-            volumeDisplay.textContent = `${Math.round(data.masterVolume * 100)}%`;
+            const slider = document.getElementById('master-volume');
+            const display = document.getElementById('master-volume-display');
+            if (slider && display) {
+                slider.value = data.masterVolume;
+                display.textContent = `${Math.round(data.masterVolume * 100)}%`;
+            }
         });
     }
 
     bindEvents() {
-        // Transport controls
         this.elements.goBtn.addEventListener('click', () => this.cueManager.go());
         this.elements.stopBtn.addEventListener('click', () => this.cueManager.stop());
         this.elements.pauseBtn.addEventListener('click', () => this.cueManager.pause());
         
-        // Cue controls
         this.elements.addAudioCue.addEventListener('click', () => this.addCue('audio'));
         this.elements.addVideoCue.addEventListener('click', () => this.addCue('video'));
         this.elements.addWaitCue.addEventListener('click', () => this.addCue('wait'));
         this.elements.addGroupCue.addEventListener('click', () => this.addCue('group'));
         this.elements.deleteCue.addEventListener('click', () => this.deleteSelectedCue());
         
-        // Settings
         this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
         this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
         
-        // Close modal when clicking outside
         this.elements.settingsModal.addEventListener('click', (e) => {
             if (e.target === this.elements.settingsModal) {
                 this.closeSettings();
             }
         });
         
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => this.handleKeydown(e));
-        
-        // CueManager events
         this.cueManager.on('cueAdded', (data) => this.onCueAdded(data));
         this.cueManager.on('cueRemoved', (data) => this.onCueRemoved(data));
         this.cueManager.on('cueUpdated', (data) => this.onCueUpdated(data));
@@ -142,7 +196,6 @@ class UIManager {
     setupMenuHandlers() {
         const { ipcRenderer } = require('electron');
         
-        // Handle menu events from main process
         ipcRenderer.on('menu-new-show', () => {
             this.cueManager.newShow();
         });
@@ -176,42 +229,10 @@ class UIManager {
         });
     }
 
-    handleKeydown(e) {
-        // Only handle shortcuts when not in input fields
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-            return;
-        }
-        
-        switch (e.code) {
-            case 'Space':
-                e.preventDefault();
-                this.cueManager.go();
-                break;
-            case 'Delete':
-            case 'Backspace':
-                e.preventDefault();
-                this.deleteSelectedCue();
-                break;
-            case 'ArrowUp':
-                e.preventDefault();
-                this.selectPreviousCue();
-                break;
-            case 'ArrowDown':
-                e.preventDefault();
-                this.selectNextCue();
-                break;
-            case 'Escape':
-                e.preventDefault();
-                this.cueManager.stop();
-                break;
-        }
-    }
-
     async addCue(type) {
         let options = {};
         
         if (type === 'audio') {
-            // Open file dialog for audio cues
             const { ipcRenderer } = require('electron');
             const result = await ipcRenderer.invoke('select-audio-file');
             
@@ -219,7 +240,6 @@ class UIManager {
                 options.filePath = result.filePath;
                 options.name = require('path').basename(result.filePath, require('path').extname(result.filePath));
                 
-                // Try to get audio file info
                 try {
                     const audioInfo = await this.audioEngine.getAudioFileInfo(result.filePath);
                     if (audioInfo) {
@@ -229,10 +249,9 @@ class UIManager {
                     console.warn('Could not get audio file info:', error);
                 }
             } else {
-                return; // User cancelled
+                return;
             }
         } else if (type === 'video') {
-            // Open file dialog for video cues
             const { ipcRenderer } = require('electron');
             const result = await ipcRenderer.invoke('select-video-file');
             
@@ -240,7 +259,6 @@ class UIManager {
                 options.filePath = result.filePath;
                 options.name = require('path').basename(result.filePath, require('path').extname(result.filePath));
                 
-                // Try to get video file info
                 try {
                     const videoInfo = await window.videoEngine.getVideoFileInfo(result.filePath);
                     if (videoInfo) {
@@ -250,10 +268,9 @@ class UIManager {
                     console.warn('Could not get video file info:', error);
                 }
                 
-                // Show video preview
                 window.videoEngine.previewVideoInInspector(result.filePath);
             } else {
-                return; // User cancelled
+                return;
             }
         }
         
@@ -264,6 +281,10 @@ class UIManager {
     deleteSelectedCue() {
         const selectedCue = this.cueManager.getSelectedCue();
         if (selectedCue) {
+            if (selectedCue.status === 'playing' || selectedCue.status === 'loading') {
+                console.log(`Stopping cue before deletion: ${selectedCue.name}`);
+                this.cueManager.stopSpecificCue(selectedCue.id);
+            }
             this.cueManager.removeCue(selectedCue.id);
         }
     }
@@ -316,7 +337,12 @@ class UIManager {
     onPlaybackStateChanged(data) {
         this.updateTransportControls();
         this.updateShowStatus();
-        this.renderCueList(); // Update cue states
+        this.renderCueList();
+        
+        if (window.app && window.app.getCueManager) {
+            const debugInfo = window.app.getCueManager().getDebugInfo();
+            console.log('Playback state changed:', debugInfo);
+        }
     }
 
     onShowChanged(data) {
@@ -328,9 +354,12 @@ class UIManager {
     }
 
     onSettingsChanged(data) {
-        // Update UI elements when settings change
         console.log('Settings changed:', data);
         this.updateTransportControls();
+        
+        if (this.elements.settingsModal && this.elements.settingsModal.style.display === 'flex') {
+            this.loadDisplaySettings();
+        }
     }
 
     // UI update methods
@@ -364,10 +393,9 @@ class UIManager {
     updateTransportControls() {
         const { goBtn, stopBtn, pauseBtn } = this.elements;
         
-        // Update button states based on playback state
         if (this.cueManager.isPlaying) {
             goBtn.textContent = 'GO';
-            goBtn.disabled = false;
+            goBtn.disabled = this.cueManager.singleCueMode && this.cueManager.isAnyThingPlaying();
         } else if (this.cueManager.isPaused) {
             goBtn.textContent = 'RESUME';
             goBtn.disabled = false;
@@ -376,13 +404,30 @@ class UIManager {
             goBtn.disabled = this.cueManager.cues.length === 0;
         }
         
-        stopBtn.disabled = !this.cueManager.isPlaying && !this.cueManager.isPaused;
+        if (this.cueManager.singleCueMode && this.cueManager.isAnyThingPlaying() && !this.cueManager.isPaused) {
+            goBtn.classList.add('single-cue-blocked');
+            goBtn.title = 'Single Cue Mode: Stop current cue or wait for completion';
+        } else {
+            goBtn.classList.remove('single-cue-blocked');
+            goBtn.title = 'Go (Space)';
+        }
+        
+        stopBtn.disabled = !this.cueManager.isPlaying && !this.cueManager.isPaused && !this.cueManager.isAnyThingPlaying();
         pauseBtn.disabled = !this.cueManager.isPlaying;
     }
 
     updateCueCount() {
         const stats = this.cueManager.getCueStats();
-        this.elements.cueCount.textContent = `${stats.total} cue${stats.total !== 1 ? 's' : ''}`;
+        let countText = `${stats.total} cue${stats.total !== 1 ? 's' : ''}`;
+        
+        if (stats.playing > 0) {
+            countText += ` (${stats.playing} playing)`;
+        }
+        if (stats.executing > 0) {
+            countText += ` (${stats.executing} executing)`;
+        }
+        
+        this.elements.cueCount.textContent = countText;
     }
 
     renderCueList() {
@@ -402,17 +447,22 @@ class UIManager {
         element.className = 'cue-item';
         element.dataset.cueId = cue.id;
         
-        // Add current cue highlight
         if (index === this.cueManager.currentCueIndex) {
             element.classList.add('current');
         }
         
-        // Add playing state
         if (cue.status === 'playing') {
             element.classList.add('playing');
         }
         
-        // Add auto-continue indicator
+        if (cue.status === 'loading') {
+            element.classList.add('loading');
+        }
+        
+        if (this.cueManager.isCueCurrentlyExecuting(cue.id)) {
+            element.classList.add('executing');
+        }
+        
         if (cue.autoContinue) {
             element.classList.add('auto-continue');
         }
@@ -430,7 +480,11 @@ class UIManager {
         });
         
         element.addEventListener('dblclick', () => {
-            this.cueManager.playCue(cue.id);
+            if (!this.cueManager.singleCueMode || !this.cueManager.isAnyThingPlaying()) {
+                this.cueManager.playCue(cue.id);
+            } else {
+                console.log('Single cue mode: Cannot start cue while another is playing');
+            }
         });
         
         return element;
@@ -447,19 +501,18 @@ class UIManager {
             statusElement.textContent = cue.status;
             statusElement.className = `cue-status ${cue.status}`;
             
-            // Update playing and auto-continue states
             element.classList.toggle('playing', cue.status === 'playing');
+            element.classList.toggle('loading', cue.status === 'loading');
+            element.classList.toggle('executing', this.cueManager.isCueCurrentlyExecuting(cue.id));
             element.classList.toggle('auto-continue', cue.autoContinue);
         }
     }
 
     updateSelection() {
-        // Remove previous selection
         if (this.selectedCueElement) {
             this.selectedCueElement.classList.remove('selected');
         }
         
-        // Add new selection
         if (this.cueManager.selectedCueId) {
             this.selectedCueElement = document.querySelector(`[data-cue-id="${this.cueManager.selectedCueId}"]`);
             if (this.selectedCueElement) {
@@ -467,519 +520,6 @@ class UIManager {
             }
         } else {
             this.selectedCueElement = null;
-        }
-    }
-
-    renderInspector() {
-        const selectedCue = this.cueManager.getSelectedCue();
-        const inspectorContent = this.elements.inspectorContent;
-        
-        if (!selectedCue) {
-            inspectorContent.innerHTML = '<div class="inspector-placeholder">Select a cue to view its properties</div>';
-            return;
-        }
-
-        inspectorContent.innerHTML = this.generateInspectorHTML(selectedCue);
-        this.bindInspectorEvents(selectedCue);
-    }
-
-    generateInspectorHTML(cue) {
-        const commonFields = `
-            <div class="inspector-group">
-                <h3>Basic</h3>
-                <div class="inspector-field">
-                    <label>Number</label>
-                    <input type="text" id="cue-number" value="${cue.number}">
-                </div>
-                <div class="inspector-field">
-                    <label>Name</label>
-                    <input type="text" id="cue-name" value="${cue.name}">
-                </div>
-                <div class="inspector-field">
-                    <label>Pre-wait (ms)</label>
-                    <input type="number" id="cue-prewait" value="${cue.preWait}" min="0">
-                </div>
-                <div class="inspector-field">
-                    <label>Post-wait (ms)</label>
-                    <input type="number" id="cue-postwait" value="${cue.postWait}" min="0">
-                </div>
-            </div>
-            
-            <div class="inspector-group">
-                <h3>Auto-Continue</h3>
-                <div class="inspector-field">
-                    <label>
-                        <input type="checkbox" id="auto-continue" ${cue.autoContinue ? 'checked' : ''}>
-                        Auto-continue to next cue
-                    </label>
-                </div>
-                <div class="inspector-field">
-                    <label>Continue delay (ms)</label>
-                    <input type="number" id="continue-delay" value="${cue.continueDelay}" min="0" ${!cue.autoContinue ? 'disabled' : ''}>
-                </div>
-                <div class="inspector-field">
-                    <label>Follow target</label>
-                    <select id="auto-follow-target" ${!cue.autoContinue ? 'disabled' : ''}>
-                        <option value="">Next in sequence</option>
-                        ${this.cueManager.cues.filter(c => c.id !== cue.id).map(c => 
-                            `<option value="${c.id}" ${cue.autoFollowTarget === c.id ? 'selected' : ''}>${c.number} - ${c.name}</option>`
-                        ).join('')}
-                    </select>
-                </div>
-            </div>
-        `;
-
-        let typeSpecificFields = '';
-
-        switch (cue.type) {
-            case 'audio':
-                typeSpecificFields = `
-                    <div class="inspector-group">
-                        <h3>Audio</h3>
-                        <div class="inspector-field">
-                            <label>File</label>
-                            <input type="text" id="audio-filepath" value="${cue.filePath || ''}" readonly>
-                            <button id="select-audio-file">Browse...</button>
-                        </div>
-                        <div class="inspector-field">
-                            <label>Volume</label>
-                            <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="${cue.volume}">
-                            <span id="volume-display">${Math.round(cue.volume * 100)}%</span>
-                        </div>
-                        <div class="inspector-field">
-                            <label>Start Time (ms)</label>
-                            <input type="number" id="audio-starttime" value="${cue.startTime}" min="0">
-                        </div>
-                        <div class="inspector-field">
-                            <label>End Time (ms)</label>
-                            <input type="number" id="audio-endtime" value="${cue.endTime || ''}" min="0">
-                        </div>
-                        <div class="inspector-field">
-                            <label>Fade In (ms)</label>
-                            <input type="number" id="audio-fadein" value="${cue.fadeIn}" min="0">
-                        </div>
-                        <div class="inspector-field">
-                            <label>Fade Out (ms)</label>
-                            <input type="number" id="audio-fadeout" value="${cue.fadeOut}" min="0">
-                        </div>
-                        <div class="inspector-field">
-                            <label>
-                                <input type="checkbox" id="audio-loop" ${cue.loop ? 'checked' : ''}>
-                                Loop
-                            </label>
-                        </div>
-                    </div>
-                `;
-                break;
-
-            case 'video':
-                typeSpecificFields = `
-                    <div class="inspector-group">
-                        <h3>Video</h3>
-                        <div class="inspector-field">
-                            <label>File</label>
-                            <input type="text" id="video-filepath" value="${cue.filePath || ''}" readonly>
-                            <button id="select-video-file">Browse...</button>
-                        </div>
-                        <div class="inspector-field">
-                            <label>Volume</label>
-                            <input type="range" id="video-volume" min="0" max="1" step="0.01" value="${cue.volume}">
-                            <span id="video-volume-display">${Math.round(cue.volume * 100)}%</span>
-                        </div>
-                        <div class="inspector-field">
-                            <label>Start Time (ms)</label>
-                            <input type="number" id="video-starttime" value="${cue.startTime}" min="0">
-                        </div>
-                        <div class="inspector-field">
-                            <label>End Time (ms)</label>
-                            <input type="number" id="video-endtime" value="${cue.endTime || ''}" min="0">
-                        </div>
-                        <div class="inspector-field">
-                            <label>Fade In (ms)</label>
-                            <input type="number" id="video-fadein" value="${cue.fadeIn}" min="0">
-                        </div>
-                        <div class="inspector-field">
-                            <label>Fade Out (ms)</label>
-                            <input type="number" id="video-fadeout" value="${cue.fadeOut}" min="0">
-                        </div>
-                        <div class="inspector-field">
-                            <label>Opacity</label>
-                            <input type="range" id="video-opacity" min="0" max="1" step="0.01" value="${cue.opacity}">
-                            <span id="opacity-display">${Math.round(cue.opacity * 100)}%</span>
-                        </div>
-                        <div class="inspector-field">
-                            <label>Aspect Ratio</label>
-                            <select id="video-aspect">
-                                <option value="auto" ${cue.aspectRatio === 'auto' ? 'selected' : ''}>Auto</option>
-                                <option value="16:9" ${cue.aspectRatio === '16:9' ? 'selected' : ''}>16:9</option>
-                                <option value="4:3" ${cue.aspectRatio === '4:3' ? 'selected' : ''}>4:3</option>
-                                <option value="stretch" ${cue.aspectRatio === 'stretch' ? 'selected' : ''}>Stretch</option>
-                            </select>
-                        </div>
-                        <div class="inspector-field">
-                            <label>
-                                <input type="checkbox" id="video-fullscreen" ${cue.fullscreen ? 'checked' : ''}>
-                                Fullscreen
-                            </label>
-                        </div>
-                        <div class="inspector-field">
-                            <label>
-                                <input type="checkbox" id="video-loop" ${cue.loop ? 'checked' : ''}>
-                                Loop
-                            </label>
-                        </div>
-                        <div class="inspector-field">
-                            <button id="preview-video">Preview Video</button>
-                        </div>
-                    </div>
-                `;
-                break;
-
-            case 'wait':
-                typeSpecificFields = `
-                    <div class="inspector-group">
-                        <h3>Wait</h3>
-                        <div class="inspector-field">
-                            <label>Duration (ms)</label>
-                            <input type="number" id="wait-duration" value="${cue.duration}" min="0">
-                        </div>
-                    </div>
-                `;
-                break;
-
-            case 'group':
-                typeSpecificFields = `
-                    <div class="inspector-group">
-                        <h3>Group</h3>
-                        <div class="inspector-field">
-                            <label>Mode</label>
-                            <select id="group-mode">
-                                <option value="sequential" ${cue.mode === 'sequential' ? 'selected' : ''}>Sequential</option>
-                                <option value="parallel" ${cue.mode === 'parallel' ? 'selected' : ''}>Parallel</option>
-                            </select>
-                        </div>
-                        <div class="inspector-field">
-                            <label>Children (${cue.children.length})</label>
-                            <div id="group-children">
-                                ${cue.children.map(childId => {
-                                    const childCue = this.cueManager.getCue(childId);
-                                    return childCue ? `<div class="child-cue">${childCue.number} - ${childCue.name}</div>` : '';
-                                }).join('')}
-                            </div>
-                        </div>
-                    </div>
-                `;
-                break;
-        }
-
-        const infoFields = `
-            <div class="inspector-group">
-                <h3>Info</h3>
-                <div class="inspector-field">
-                    <label>Type</label>
-                    <input type="text" value="${cue.type}" readonly>
-                </div>
-                <div class="inspector-field">
-                    <label>Status</label>
-                    <input type="text" value="${cue.status}" readonly>
-                </div>
-                <div class="inspector-field">
-                    <label>Duration</label>
-                    <input type="text" value="${this.formatDuration(cue.duration)}" readonly>
-                </div>
-                <div class="inspector-field">
-                    <label>Created</label>
-                    <input type="text" value="${new Date(cue.created).toLocaleString()}" readonly>
-                </div>
-            </div>
-        `;
-
-        return commonFields + typeSpecificFields + infoFields;
-    }
-
-    bindInspectorEvents(cue) {
-        // Basic fields
-        const numberInput = document.getElementById('cue-number');
-        const nameInput = document.getElementById('cue-name');
-        const preWaitInput = document.getElementById('cue-prewait');
-        const postWaitInput = document.getElementById('cue-postwait');
-
-        // Auto-continue fields
-        const autoContinueCheckbox = document.getElementById('auto-continue');
-        const continueDelayInput = document.getElementById('continue-delay');
-        const autoFollowTargetSelect = document.getElementById('auto-follow-target');
-
-        if (numberInput) {
-            numberInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { number: e.target.value || cue.number });
-            });
-        }
-
-        if (nameInput) {
-            nameInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { name: e.target.value });
-            });
-        }
-
-        if (preWaitInput) {
-            preWaitInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { preWait: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        if (postWaitInput) {
-            postWaitInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { postWait: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        // Auto-continue events
-        if (autoContinueCheckbox) {
-            autoContinueCheckbox.addEventListener('change', (e) => {
-                const autoContinue = e.target.checked;
-                this.cueManager.updateCue(cue.id, { autoContinue });
-                
-                // Enable/disable related fields
-                if (continueDelayInput) continueDelayInput.disabled = !autoContinue;
-                if (autoFollowTargetSelect) autoFollowTargetSelect.disabled = !autoContinue;
-            });
-        }
-
-        if (continueDelayInput) {
-            continueDelayInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { continueDelay: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        if (autoFollowTargetSelect) {
-            autoFollowTargetSelect.addEventListener('change', (e) => {
-                const target = e.target.value || null;
-                this.cueManager.updateCue(cue.id, { autoFollowTarget: target });
-            });
-        }
-
-        // Type-specific fields
-        if (cue.type === 'audio') {
-            this.bindAudioInspectorEvents(cue);
-        } else if (cue.type === 'video') {
-            this.bindVideoInspectorEvents(cue);
-        } else if (cue.type === 'wait') {
-            this.bindWaitInspectorEvents(cue);
-        } else if (cue.type === 'group') {
-            this.bindGroupInspectorEvents(cue);
-        }
-    }
-
-    bindAudioInspectorEvents(cue) {
-        const selectFileBtn = document.getElementById('select-audio-file');
-        const volumeSlider = document.getElementById('audio-volume');
-        const volumeDisplay = document.getElementById('volume-display');
-        const startTimeInput = document.getElementById('audio-starttime');
-        const endTimeInput = document.getElementById('audio-endtime');
-        const fadeInInput = document.getElementById('audio-fadein');
-        const fadeOutInput = document.getElementById('audio-fadeout');
-        const loopCheckbox = document.getElementById('audio-loop');
-
-        if (selectFileBtn) {
-            selectFileBtn.addEventListener('click', async () => {
-                const { ipcRenderer } = require('electron');
-                const result = await ipcRenderer.invoke('select-audio-file');
-                
-                if (result.success) {
-                    const updates = { filePath: result.filePath };
-                    
-                    // Try to get audio file info
-                    try {
-                        const audioInfo = await this.audioEngine.getAudioFileInfo(result.filePath);
-                        if (audioInfo) {
-                            updates.duration = audioInfo.duration;
-                        }
-                    } catch (error) {
-                        console.warn('Could not get audio file info:', error);
-                    }
-                    
-                    this.cueManager.updateCue(cue.id, updates);
-                    this.renderInspector(); // Refresh inspector
-                }
-            });
-        }
-
-        if (volumeSlider && volumeDisplay) {
-            volumeSlider.addEventListener('input', (e) => {
-                const volume = parseFloat(e.target.value);
-                volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
-            });
-            
-            volumeSlider.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { volume: parseFloat(e.target.value) });
-            });
-        }
-
-        if (startTimeInput) {
-            startTimeInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { startTime: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        if (endTimeInput) {
-            endTimeInput.addEventListener('change', (e) => {
-                const value = e.target.value;
-                this.cueManager.updateCue(cue.id, { endTime: value ? parseInt(value) : null });
-            });
-        }
-
-        if (fadeInInput) {
-            fadeInInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { fadeIn: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        if (fadeOutInput) {
-            fadeOutInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { fadeOut: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        if (loopCheckbox) {
-            loopCheckbox.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { loop: e.target.checked });
-            });
-        }
-    }
-
-    bindVideoInspectorEvents(cue) {
-        const selectFileBtn = document.getElementById('select-video-file');
-        const volumeSlider = document.getElementById('video-volume');
-        const volumeDisplay = document.getElementById('video-volume-display');
-        const startTimeInput = document.getElementById('video-starttime');
-        const endTimeInput = document.getElementById('video-endtime');
-        const fadeInInput = document.getElementById('video-fadein');
-        const fadeOutInput = document.getElementById('video-fadeout');
-        const opacitySlider = document.getElementById('video-opacity');
-        const opacityDisplay = document.getElementById('opacity-display');
-        const aspectSelect = document.getElementById('video-aspect');
-        const fullscreenCheckbox = document.getElementById('video-fullscreen');
-        const loopCheckbox = document.getElementById('video-loop');
-        const previewBtn = document.getElementById('preview-video');
-
-        if (selectFileBtn) {
-            selectFileBtn.addEventListener('click', async () => {
-                const { ipcRenderer } = require('electron');
-                const result = await ipcRenderer.invoke('select-video-file');
-                
-                if (result.success) {
-                    const updates = { filePath: result.filePath };
-                    
-                    // Try to get video file info
-                    try {
-                        const videoInfo = await window.videoEngine.getVideoFileInfo(result.filePath);
-                        if (videoInfo) {
-                            updates.duration = videoInfo.duration;
-                        }
-                    } catch (error) {
-                        console.warn('Could not get video file info:', error);
-                    }
-                    
-                    this.cueManager.updateCue(cue.id, updates);
-                    this.renderInspector(); // Refresh inspector
-                    
-                    // Show video preview
-                    window.videoEngine.previewVideoInInspector(result.filePath);
-                }
-            });
-        }
-
-        if (volumeSlider && volumeDisplay) {
-            volumeSlider.addEventListener('input', (e) => {
-                const volume = parseFloat(e.target.value);
-                volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
-            });
-            
-            volumeSlider.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { volume: parseFloat(e.target.value) });
-            });
-        }
-
-        if (opacitySlider && opacityDisplay) {
-            opacitySlider.addEventListener('input', (e) => {
-                const opacity = parseFloat(e.target.value);
-                opacityDisplay.textContent = `${Math.round(opacity * 100)}%`;
-            });
-            
-            opacitySlider.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { opacity: parseFloat(e.target.value) });
-            });
-        }
-
-        if (startTimeInput) {
-            startTimeInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { startTime: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        if (endTimeInput) {
-            endTimeInput.addEventListener('change', (e) => {
-                const value = e.target.value;
-                this.cueManager.updateCue(cue.id, { endTime: value ? parseInt(value) : null });
-            });
-        }
-
-        if (fadeInInput) {
-            fadeInInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { fadeIn: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        if (fadeOutInput) {
-            fadeOutInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { fadeOut: parseInt(e.target.value) || 0 });
-            });
-        }
-
-        if (aspectSelect) {
-            aspectSelect.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { aspectRatio: e.target.value });
-            });
-        }
-
-        if (fullscreenCheckbox) {
-            fullscreenCheckbox.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { fullscreen: e.target.checked });
-            });
-        }
-
-        if (loopCheckbox) {
-            loopCheckbox.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { loop: e.target.checked });
-            });
-        }
-
-        if (previewBtn) {
-            previewBtn.addEventListener('click', () => {
-                if (cue.filePath) {
-                    window.videoEngine.previewVideoInInspector(cue.filePath);
-                }
-            });
-        }
-    }
-
-    bindWaitInspectorEvents(cue) {
-        const durationInput = document.getElementById('wait-duration');
-        
-        if (durationInput) {
-            durationInput.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { duration: parseInt(e.target.value) || 0 });
-            });
-        }
-    }
-
-    bindGroupInspectorEvents(cue) {
-        const modeSelect = document.getElementById('group-mode');
-        
-        if (modeSelect) {
-            modeSelect.addEventListener('change', (e) => {
-                this.cueManager.updateCue(cue.id, { mode: e.target.value });
-            });
         }
     }
 
@@ -1005,7 +545,6 @@ class UIManager {
             }
         }, 1000);
         
-        // Initial update
         if (this.elements.currentTime) {
             this.elements.currentTime.textContent = this.formatTime(new Date());
         }
@@ -1016,7 +555,6 @@ class UIManager {
         this.elements.settingsModal.style.display = 'flex';
         this.elements.settingsModal.classList.add('show');
         
-        // Load settings immediately when opening
         await this.loadDisplaySettings();
     }
 
@@ -1027,7 +565,6 @@ class UIManager {
 
     async loadDisplaySettings() {
         try {
-            // Load playback settings first
             const singleCueModeCheckbox = document.getElementById('single-cue-mode');
             const autoContinueCheckbox = document.getElementById('auto-continue-enabled');
             
@@ -1038,12 +575,10 @@ class UIManager {
                 autoContinueCheckbox.checked = this.cueManager.getAutoContinueEnabled();
             }
             
-            // Refresh displays
             if (window.displayManager) {
                 await window.displayManager.detectDisplays();
                 const displays = window.displayManager.getDisplays();
                 
-                // Update displays list
                 const displaysList = document.getElementById('displays-list');
                 if (displaysList) {
                     if (displays.length === 0) {
@@ -1061,7 +596,6 @@ class UIManager {
                     }
                 }
                 
-                // Update routing options
                 const routingSelect = document.getElementById('video-routing');
                 if (routingSelect) {
                     const routingOptions = window.displayManager.getRoutingOptions();
@@ -1073,7 +607,6 @@ class UIManager {
                         </option>`
                     ).join('');
                     
-                    // Update status bar
                     const selectedOption = routingOptions.find(opt => opt.id.toString() === currentRouting.toString());
                     this.elements.displayRouting.textContent = `Video: ${selectedOption ? selectedOption.name : 'Unknown'}`;
                 }
@@ -1084,7 +617,6 @@ class UIManager {
                 }
             }
             
-            // Set up event handlers
             this.setupSettingsEventHandlers();
             
         } catch (error) {
@@ -1093,60 +625,31 @@ class UIManager {
     }
 
     setupSettingsEventHandlers() {
-        // Playback settings
         const singleCueModeCheckbox = document.getElementById('single-cue-mode');
         const autoContinueCheckbox = document.getElementById('auto-continue-enabled');
         
-        // Display settings  
-        const routingSelect = document.getElementById('video-routing');
-        const testPatternBtn = document.getElementById('test-pattern-btn');
-        const clearDisplaysBtn = document.getElementById('clear-displays-btn');
-        const refreshDisplaysBtn = document.getElementById('refresh-displays');
-        const applySettingsBtn = document.getElementById('apply-settings');
-        
-        // Handle playback settings
         if (singleCueModeCheckbox) {
-            const newSingleCueModeCheckbox = singleCueModeCheckbox.cloneNode(true);
-            singleCueModeCheckbox.parentNode.replaceChild(newSingleCueModeCheckbox, singleCueModeCheckbox);
-            newSingleCueModeCheckbox.addEventListener('change', (e) => {
+            const newCheckbox = singleCueModeCheckbox.cloneNode(true);
+            singleCueModeCheckbox.parentNode.replaceChild(newCheckbox, singleCueModeCheckbox);
+            newCheckbox.addEventListener('change', (e) => {
                 this.cueManager.setSingleCueMode(e.target.checked);
             });
         }
         
         if (autoContinueCheckbox) {
-            const newAutoContinueCheckbox = autoContinueCheckbox.cloneNode(true);
-            autoContinueCheckbox.parentNode.replaceChild(newAutoContinueCheckbox, autoContinueCheckbox);
-            newAutoContinueCheckbox.addEventListener('change', (e) => {
+            const newCheckbox = autoContinueCheckbox.cloneNode(true);
+            autoContinueCheckbox.parentNode.replaceChild(newCheckbox, autoContinueCheckbox);
+            newCheckbox.addEventListener('change', (e) => {
                 this.cueManager.setAutoContinueEnabled(e.target.checked);
             });
         }
         
-        // Remove existing listeners by cloning elements (display settings)
-        if (routingSelect) {
-            const newRoutingSelect = routingSelect.cloneNode(true);
-            routingSelect.parentNode.replaceChild(newRoutingSelect, routingSelect);
-        }
-        if (testPatternBtn) {
-            const newTestPatternBtn = testPatternBtn.cloneNode(true);
-            testPatternBtn.parentNode.replaceChild(newTestPatternBtn, testPatternBtn);
-        }
-        if (clearDisplaysBtn) {
-            const newClearDisplaysBtn = clearDisplaysBtn.cloneNode(true);
-            clearDisplaysBtn.parentNode.replaceChild(newClearDisplaysBtn, clearDisplaysBtn);
-        }
-        if (refreshDisplaysBtn) {
-            const newRefreshDisplaysBtn = refreshDisplaysBtn.cloneNode(true);
-            refreshDisplaysBtn.parentNode.replaceChild(newRefreshDisplaysBtn, refreshDisplaysBtn);
-        }
-        if (applySettingsBtn) {
-            const newApplySettingsBtn = applySettingsBtn.cloneNode(true);
-            applySettingsBtn.parentNode.replaceChild(newApplySettingsBtn, applySettingsBtn);
-        }
-        
-        // Re-get elements and add listeners (display settings)
-        const newRoutingSelect = document.getElementById('video-routing');
-        if (newRoutingSelect && window.displayManager) {
-            newRoutingSelect.addEventListener('change', async (e) => {
+        // Handle display settings
+        const routingSelect = document.getElementById('video-routing');
+        if (routingSelect && window.displayManager) {
+            const newSelect = routingSelect.cloneNode(true);
+            routingSelect.parentNode.replaceChild(newSelect, routingSelect);
+            newSelect.addEventListener('change', async (e) => {
                 const success = await window.displayManager.setVideoRouting(e.target.value);
                 if (success) {
                     const option = window.displayManager.getRoutingOptions().find(opt => opt.id.toString() === e.target.value);
@@ -1155,31 +658,343 @@ class UIManager {
             });
         }
         
-        const newTestPatternBtn = document.getElementById('test-pattern-btn');
-        if (newTestPatternBtn && window.displayManager) {
-            newTestPatternBtn.addEventListener('click', async () => {
+        const testPatternBtn = document.getElementById('test-pattern-btn');
+        if (testPatternBtn && window.displayManager) {
+            const newBtn = testPatternBtn.cloneNode(true);
+            testPatternBtn.parentNode.replaceChild(newBtn, testPatternBtn);
+            newBtn.addEventListener('click', async () => {
                 await window.displayManager.showTestPattern();
             });
         }
         
-        const newClearDisplaysBtn = document.getElementById('clear-displays-btn');
-        if (newClearDisplaysBtn && window.displayManager) {
-            newClearDisplaysBtn.addEventListener('click', async () => {
+        const clearDisplaysBtn = document.getElementById('clear-displays-btn');
+        if (clearDisplaysBtn && window.displayManager) {
+            const newBtn = clearDisplaysBtn.cloneNode(true);
+            clearDisplaysBtn.parentNode.replaceChild(newBtn, clearDisplaysBtn);
+            newBtn.addEventListener('click', async () => {
                 await window.displayManager.clearAllDisplays();
             });
         }
         
-        const newRefreshDisplaysBtn = document.getElementById('refresh-displays');
-        if (newRefreshDisplaysBtn) {
-            newRefreshDisplaysBtn.addEventListener('click', async () => {
+        const refreshDisplaysBtn = document.getElementById('refresh-displays');
+        if (refreshDisplaysBtn) {
+            const newBtn = refreshDisplaysBtn.cloneNode(true);
+            refreshDisplaysBtn.parentNode.replaceChild(newBtn, refreshDisplaysBtn);
+            newBtn.addEventListener('click', async () => {
                 await this.loadDisplaySettings();
             });
         }
         
-        const newApplySettingsBtn = document.getElementById('apply-settings');
-        if (newApplySettingsBtn) {
-            newApplySettingsBtn.addEventListener('click', () => {
+        const applySettingsBtn = document.getElementById('apply-settings');
+        if (applySettingsBtn) {
+            const newBtn = applySettingsBtn.cloneNode(true);
+            applySettingsBtn.parentNode.replaceChild(newBtn, applySettingsBtn);
+            newBtn.addEventListener('click', () => {
                 this.closeSettings();
+            });
+        }
+    }
+
+    // Inspector methods
+    renderInspector() {
+        const selectedCue = this.cueManager.getSelectedCue();
+        const inspectorContent = this.elements.inspectorContent;
+        
+        if (!selectedCue) {
+            inspectorContent.innerHTML = '<div class="inspector-placeholder">Select a cue to view its properties</div>';
+            return;
+        }
+
+        inspectorContent.innerHTML = this.generateInspectorHTML(selectedCue);
+        this.bindInspectorEvents(selectedCue);
+    }
+
+    generateInspectorHTML(selectedCue) {
+        const commonFields = `
+            <div class="inspector-group">
+                <h3>Basic</h3>
+                <div class="inspector-field">
+                    <label>Number</label>
+                    <input type="text" id="cue-number" value="${selectedCue.number}">
+                </div>
+                <div class="inspector-field">
+                    <label>Name</label>
+                    <input type="text" id="cue-name" value="${selectedCue.name}">
+                </div>
+                <div class="inspector-field">
+                    <label>Status</label>
+                    <input type="text" value="${selectedCue.status}" readonly>
+                </div>
+                <div class="inspector-field">
+                    <label>Type</label>
+                    <input type="text" value="${selectedCue.type}" readonly>
+                </div>
+                <div class="inspector-field">
+                    <label>Duration</label>
+                    <input type="text" value="${this.formatDuration(selectedCue.duration)}" readonly>
+                </div>
+            </div>
+        `;
+
+        let typeSpecificFields = '';
+
+        switch (selectedCue.type) {
+            case 'audio':
+                typeSpecificFields = `
+                    <div class="inspector-group">
+                        <h3>Audio</h3>
+                        <div class="inspector-field">
+                            <label>File</label>
+                            <input type="text" id="audio-filepath" value="${selectedCue.filePath || ''}" readonly>
+                            <button id="select-audio-file">Browse...</button>
+                        </div>
+                        <div class="inspector-field">
+                            <label>Volume: <span id="audio-volume-display">${Math.round((selectedCue.volume || 1.0) * 100)}%</span></label>
+                            <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="${selectedCue.volume || 1.0}">
+                        </div>
+                    </div>
+                `;
+                break;
+
+            case 'video':
+                typeSpecificFields = `
+                    <div class="inspector-group">
+                        <h3>Video</h3>
+                        <div class="inspector-field">
+                            <label>File</label>
+                            <input type="text" id="video-filepath" value="${selectedCue.filePath || ''}" readonly>
+                            <button id="select-video-file">Browse...</button>
+                        </div>
+                        <div class="inspector-field">
+                            <label>Volume: <span id="video-volume-display">${Math.round((selectedCue.volume || 1.0) * 100)}%</span></label>
+                            <input type="range" id="video-volume" min="0" max="1" step="0.01" value="${selectedCue.volume || 1.0}">
+                        </div>
+                        <div class="inspector-field">
+                            <label>Opacity: <span id="video-opacity-display">${Math.round((selectedCue.opacity || 1.0) * 100)}%</span></label>
+                            <input type="range" id="video-opacity" min="0" max="1" step="0.01" value="${selectedCue.opacity || 1.0}">
+                        </div>
+                    </div>
+                `;
+                break;
+
+            case 'wait':
+                typeSpecificFields = `
+                    <div class="inspector-group">
+                        <h3>Wait</h3>
+                        <div class="inspector-field">
+                            <label>Duration (ms)</label>
+                            <input type="number" id="wait-duration" value="${selectedCue.duration || 5000}" min="0">
+                        </div>
+                    </div>
+                `;
+                break;
+
+            case 'group':
+                typeSpecificFields = `
+                    <div class="inspector-group">
+                        <h3>Group</h3>
+                        <div class="inspector-field">
+                            <label>Mode</label>
+                            <select id="group-mode">
+                                <option value="sequential" ${(selectedCue.mode || 'sequential') === 'sequential' ? 'selected' : ''}>Sequential</option>
+                                <option value="parallel" ${selectedCue.mode === 'parallel' ? 'selected' : ''}>Parallel</option>
+                            </select>
+                        </div>
+                    </div>
+                `;
+                break;
+        }
+
+        const autoContinueFields = `
+            <div class="inspector-group">
+                <h3>Auto-Continue</h3>
+                <div class="inspector-field">
+                    <label>
+                        <input type="checkbox" id="auto-continue" ${selectedCue.autoContinue ? 'checked' : ''}>
+                        Auto-continue to next cue
+                    </label>
+                </div>
+                <div class="inspector-field">
+                    <label>Continue delay (ms)</label>
+                    <input type="number" id="continue-delay" value="${selectedCue.continueDelay || 0}" min="0" ${!selectedCue.autoContinue ? 'disabled' : ''}>
+                </div>
+            </div>
+        `;
+        
+        return commonFields + typeSpecificFields + autoContinueFields;
+    }
+
+    bindInspectorEvents(cue) {
+        const numberInput = document.getElementById('cue-number');
+        const nameInput = document.getElementById('cue-name');
+        const autoContinueCheckbox = document.getElementById('auto-continue');
+        const continueDelayInput = document.getElementById('continue-delay');
+
+        if (numberInput) {
+            numberInput.addEventListener('change', (e) => {
+                this.cueManager.updateCue(cue.id, { number: e.target.value || cue.number });
+            });
+        }
+
+        if (nameInput) {
+            nameInput.addEventListener('change', (e) => {
+                this.cueManager.updateCue(cue.id, { name: e.target.value });
+            });
+        }
+
+        if (autoContinueCheckbox) {
+            autoContinueCheckbox.addEventListener('change', (e) => {
+                const autoContinue = e.target.checked;
+                this.cueManager.updateCue(cue.id, { autoContinue });
+                
+                if (continueDelayInput) {
+                    continueDelayInput.disabled = !autoContinue;
+                }
+            });
+        }
+
+        if (continueDelayInput) {
+            continueDelayInput.addEventListener('change', (e) => {
+                this.cueManager.updateCue(cue.id, { continueDelay: parseInt(e.target.value) || 0 });
+            });
+        }
+
+        // Type-specific event binding
+        if (cue.type === 'audio') {
+            this.bindAudioInspectorEvents(cue);
+        } else if (cue.type === 'video') {
+            this.bindVideoInspectorEvents(cue);
+        } else if (cue.type === 'wait') {
+            this.bindWaitInspectorEvents(cue);
+        } else if (cue.type === 'group') {
+            this.bindGroupInspectorEvents(cue);
+        }
+    }
+
+    bindAudioInspectorEvents(cue) {
+        const selectFileBtn = document.getElementById('select-audio-file');
+        const volumeSlider = document.getElementById('audio-volume');
+        const volumeDisplay = document.getElementById('audio-volume-display');
+
+        if (selectFileBtn) {
+            selectFileBtn.addEventListener('click', async () => {
+                const { ipcRenderer } = require('electron');
+                const result = await ipcRenderer.invoke('select-audio-file');
+                
+                if (result.success) {
+                    const updates = { filePath: result.filePath };
+                    
+                    try {
+                        const audioInfo = await this.audioEngine.getAudioFileInfo(result.filePath);
+                        if (audioInfo) {
+                            updates.duration = audioInfo.duration;
+                        }
+                    } catch (error) {
+                        console.warn('Could not get audio file info:', error);
+                    }
+                    
+                    this.cueManager.updateCue(cue.id, updates);
+                    this.renderInspector();
+                }
+            });
+        }
+
+        if (volumeSlider && volumeDisplay) {
+            volumeSlider.addEventListener('input', (e) => {
+                const volume = parseFloat(e.target.value);
+                volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
+                
+                if (window.audioEngine && window.audioEngine.setCueVolume(cue.id, volume)) {
+                    console.log(`Live volume update for audio cue ${cue.number}: ${Math.round(volume * 100)}%`);
+                }
+            });
+            
+            volumeSlider.addEventListener('change', (e) => {
+                const volume = parseFloat(e.target.value);
+                this.cueManager.updateCue(cue.id, { volume });
+                console.log(`Audio cue ${cue.number} volume saved: ${Math.round(volume * 100)}%`);
+            });
+        }
+    }
+
+    bindVideoInspectorEvents(cue) {
+        const selectFileBtn = document.getElementById('select-video-file');
+        const volumeSlider = document.getElementById('video-volume');
+        const volumeDisplay = document.getElementById('video-volume-display');
+        const opacitySlider = document.getElementById('video-opacity');
+        const opacityDisplay = document.getElementById('video-opacity-display');
+
+        if (selectFileBtn) {
+            selectFileBtn.addEventListener('click', async () => {
+                const { ipcRenderer } = require('electron');
+                const result = await ipcRenderer.invoke('select-video-file');
+                
+                if (result.success) {
+                    const updates = { filePath: result.filePath };
+                    
+                    try {
+                        const videoInfo = await window.videoEngine.getVideoFileInfo(result.filePath);
+                        if (videoInfo) {
+                            updates.duration = videoInfo.duration;
+                        }
+                    } catch (error) {
+                        console.warn('Could not get video file info:', error);
+                    }
+                    
+                    this.cueManager.updateCue(cue.id, updates);
+                    this.renderInspector();
+                    
+                    window.videoEngine.previewVideoInInspector(result.filePath);
+                }
+            });
+        }
+
+        if (volumeSlider && volumeDisplay) {
+            volumeSlider.addEventListener('input', (e) => {
+                const volume = parseFloat(e.target.value);
+                volumeDisplay.textContent = `${Math.round(volume * 100)}%`;
+                
+                if (window.videoEngine && window.videoEngine.setCueVolume(cue.id, volume)) {
+                    console.log(`Live volume update for video cue ${cue.number}: ${Math.round(volume * 100)}%`);
+                }
+            });
+            
+            volumeSlider.addEventListener('change', (e) => {
+                const volume = parseFloat(e.target.value);
+                this.cueManager.updateCue(cue.id, { volume });
+                console.log(`Video cue ${cue.number} volume saved: ${Math.round(volume * 100)}%`);
+            });
+        }
+
+        if (opacitySlider && opacityDisplay) {
+            opacitySlider.addEventListener('input', (e) => {
+                const opacity = parseFloat(e.target.value);
+                opacityDisplay.textContent = `${Math.round(opacity * 100)}%`;
+            });
+            
+            opacitySlider.addEventListener('change', (e) => {
+                const opacity = parseFloat(e.target.value);
+                this.cueManager.updateCue(cue.id, { opacity });
+            });
+        }
+    }
+
+    bindWaitInspectorEvents(cue) {
+        const durationInput = document.getElementById('wait-duration');
+        
+        if (durationInput) {
+            durationInput.addEventListener('change', (e) => {
+                this.cueManager.updateCue(cue.id, { duration: parseInt(e.target.value) || 0 });
+            });
+        }
+    }
+
+    bindGroupInspectorEvents(cue) {
+        const modeSelect = document.getElementById('group-mode');
+        
+        if (modeSelect) {
+            modeSelect.addEventListener('change', (e) => {
+                this.cueManager.updateCue(cue.id, { mode: e.target.value });
             });
         }
     }

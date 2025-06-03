@@ -200,14 +200,14 @@ body {
     height: 100%;
     background: rgba(0, 0, 0, 0.8);
     z-index: 1000;
-    display: none !important; /* Force hidden by default */
+    display: none !important;
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(2px);
 }
 
 .modal.show {
-    display: flex !important; /* Force visible when show class is added */
+    display: flex !important;
 }
 
 .modal-content {
@@ -499,6 +499,7 @@ body {
     cursor: pointer;
     transition: background-color 0.15s ease;
     font-size: 13px;
+    position: relative;
 }
 
 .cue-item:hover {
@@ -516,6 +517,16 @@ body {
 
 .cue-item.playing {
     background-color: #17a2b8;
+}
+
+.cue-item.loading {
+    background-color: #e83e8c;
+    animation: pulse 1s ease-in-out infinite alternate;
+}
+
+.cue-item.executing {
+    border-left: 4px solid #fd7e14;
+    background-color: rgba(253, 126, 20, 0.3);
 }
 
 .cue-item.auto-continue {
@@ -553,6 +564,10 @@ body {
 .cue-status.ready { color: #28a745; }
 .cue-status.error { color: #dc3545; }
 .cue-status.playing { color: #17a2b8; }
+.cue-status.executing { 
+    color: #fd7e14; 
+    font-weight: 600;
+}
 
 @keyframes pulse {
     from { opacity: 0.6; }
@@ -626,50 +641,9 @@ body {
     color: #888;
 }
 
-.inspector-field button {
-    background: #404040;
-    border: 1px solid #555;
-    border-radius: 4px;
-    color: white;
-    padding: 6px 12px;
-    cursor: pointer;
-    font-size: 11px;
-    width: 100%;
-    margin-top: 4px;
-}
-
-.inspector-field button:hover {
-    background: #505050;
-}
-
-.inspector-field input[type="range"] {
-    margin-bottom: 4px;
-}
-
 .inspector-field input[type="checkbox"] {
     width: auto;
     margin-right: 8px;
-}
-
-.child-cue {
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 4px;
-    padding: 8px;
-    margin-bottom: 4px;
-    font-size: 11px;
-    color: #ccc;
-}
-
-/* Auto-continue specific styles */
-.inspector-group h3.auto-continue {
-    color: #ffc107;
-    border-bottom-color: #ffc107;
-}
-
-.inspector-field label:has(input[type="checkbox"]#auto-continue) {
-    color: #ffc107;
-    font-weight: 600;
 }
 
 /* Status Bar */
@@ -690,6 +664,19 @@ body {
     display: flex;
     gap: 15px;
     align-items: center;
+}
+
+/* Single Cue Mode Enhancements */
+.transport-btn.single-cue-blocked {
+    background: #6c757d !important;
+    border-color: #545b62 !important;
+    cursor: not-allowed !important;
+    opacity: 0.7;
+}
+
+.transport-btn.single-cue-blocked:hover {
+    background: #6c757d !important;
+    border-color: #545b62 !important;
 }
 
 /* Scrollbar Styles */
