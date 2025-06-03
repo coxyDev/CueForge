@@ -1,4 +1,271 @@
-/* Reset and Base Styles */
+/* Waveform Display Styles */
+.waveform-container {
+    position: relative;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    overflow: hidden;
+    height: 120px;
+    margin-top: 4px;
+}
+
+.waveform-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: crosshair;
+}
+
+.waveform-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(26, 26, 26, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0d7377;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.waveform-loading::after {
+    content: '';
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-left: 8px;
+    border: 2px solid #0d7377;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Enhanced Inspector Styles for Audio */
+.inspector-group {
+    margin-bottom: 20px;
+}
+
+.inspector-group h3 {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #b0b0b0;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #404040;
+    padding-bottom: 4px;
+}
+
+.inspector-group h3.audio-enhanced {
+    color: #0d7377;
+    border-bottom-color: #0d7377;
+}
+
+.inspector-field {
+    margin-bottom: 12px;
+}
+
+.inspector-field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: #b0b0b0;
+    margin-bottom: 4px;
+}
+
+.inspector-field input, .inspector-field select {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    color: white;
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
+.inspector-field input:focus, .inspector-field select:focus {
+    outline: none;
+    border-color: #0d7377;
+    box-shadow: 0 0 0 2px rgba(13, 115, 119, 0.2);
+}
+
+.inspector-field input:disabled, .inspector-field select:disabled {
+    background: #151515;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.inspector-field input[readonly] {
+    background: #151515;
+    color: #888;
+}
+
+.inspector-field button {
+    background: #404040;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: white;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 11px;
+    width: 100%;
+    margin-top: 4px;
+    transition: all 0.2s ease;
+}
+
+.inspector-field button:hover {
+    background: #505050;
+    border-color: #666;
+}
+
+.inspector-field button:active {
+    background: #353535;
+}
+
+.inspector-field input[type="range"] {
+    margin-bottom: 4px;
+    height: 6px;
+    background: #404040;
+    border-radius: 3px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.inspector-field input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #0d7377;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.inspector-field input[type="range"]::-webkit-slider-thumb:hover {
+    background: #0f8286;
+    transform: scale(1.1);
+}
+
+.inspector-field input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #0d7377;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.inspector-field input[type="range"]::-moz-range-thumb:hover {
+    background: #0f8286;
+    transform: scale(1.1);
+}
+
+.inspector-field input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+    accent-color: #0d7377;
+}
+
+/* Audio-specific enhancements */
+.inspector-field.audio-control {
+    background: rgba(13, 115, 119, 0.1);
+    border: 1px solid rgba(13, 115, 119, 0.3);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 8px;
+}
+
+.inspector-field.audio-control label {
+    color: #0d7377;
+    font-weight: 600;
+}
+
+/* Waveform interaction hints */
+.waveform-container::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #0d7377;
+    opacity: 0.5;
+}
+
+.waveform-container:hover::after {
+    opacity: 1;
+}
+
+/* Tooltip for waveform controls */
+.waveform-container[title] {
+    position: relative;
+}
+
+.waveform-container:hover::before {
+    content: attr(title);
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2d2d2d;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 1000;
+    border: 1px solid #404040;
+}
+
+/* Enhanced volume control styling */
+.inspector-field:has(input[type="range"]#audio-volume) {
+    background: rgba(13, 115, 119, 0.05);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+.inspector-field:has(input[type="range"]#video-volume) {
+    background: rgba(108, 117, 125, 0.05);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+/* Real-time feedback for controls */
+.inspector-field input[type="range"]:active::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px rgba(13, 115, 119, 0.3);
+}
+
+.inspector-field input[type="range"]:active::-moz-range-thumb {
+    box-shadow: 0 0 0 4px rgba(13, 115, 119, 0.3);
+}
+
+/* Responsive waveform */
+@media (max-width: 800px) {
+    .waveform-container {
+        height: 80px;
+    }
+    
+    .inspector-field {
+        margin-bottom: 8px;
+    }
+    
+    .inspector-group {
+        margin-bottom: 16px;
+    }
+}/* Reset and Base Styles */
 * {
     margin: 0;
     padding: 0;
@@ -152,6 +419,7 @@ body {
     border-radius: 2px;
     outline: none;
     -webkit-appearance: none;
+    appearance: none;
 }
 
 .master-volume-control input[type="range"]::-webkit-slider-thumb {
