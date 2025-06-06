@@ -38,6 +38,7 @@ class QLABCloneApp {
             
             // Initialize UI manager
             this.uiManager = new UIManager(this.cueManager, this.audioEngine);
+            this.uiManager.enhanceAudioEngineWithFades();
             
             // Set up global error handling
             this.setupErrorHandling();
