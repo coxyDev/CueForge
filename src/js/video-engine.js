@@ -5,6 +5,10 @@ class VideoEngine {
         this.fullscreenVideo = null;
         this.initialized = false;
         this.masterVolume = 1.0;
+        this.videoTimeline = null;
+    this.currentVideoCue = null;
+    this.reversePlaybackInterval = null;
+    this.currentPlayingVideo = null; // Track currently playing video
         
         this.initializeVideoEngine();
     }
@@ -573,6 +577,578 @@ class VideoEngine {
             videoSection.style.display = 'flex';
         }
     }
+    // Enhanced Video Engine - Add these methods to your existing VideoEngine class
+// in src/js/video-engine.js
+
+// Add these new methods to your existing VideoEngine class:
+
+// Frame-accurate seeking support
+async seekToFrame(video, frameNumber, frameRate = 30) {
+    if (!video) return false;
+    
+    try {
+        const targetTime = frameNumber / frameRate;
+        const clampedTime = Math.max(0, Math.min(video.duration, targetTime));
+        
+        // Use precise seeking
+        video.currentTime = clampedTime;
+        
+        // Wait for seek to complete
+        await new Promise((resolve, reject) => {
+            const onSeeked = () => {
+                video.removeEventListener('seeked', onSeeked);
+                video.removeEventListener('error', onError);
+                resolve();
+            };
+            
+            const onError = () => {
+                video.removeEventListener('seeked', onSeeked);
+                video.removeEventListener('error', onError);
+                reject(new Error('Seek failed'));
+            };
+            
+            video.addEventListener('seeked', onSeeked, { once: true });
+            video.addEventListener('error', onError, { once: true });
+            
+            // Fallback timeout
+            setTimeout(() => {
+                video.removeEventListener('seeked', onSeeked);
+                video.removeEventListener('error', onError);
+                resolve(); // Continue even if seek event doesn't fire
+            }, 1000);
+        });
+        
+        return true;
+    } catch (error) {
+        console.error('Frame seek failed:', error);
+        return false;
+    }
+}
+
+// Detect video frame rate
+detectFrameRate(video) {
+    // Try to get frame rate from video metadata
+    try {
+        // Check for common frame rates first
+        const commonFrameRates = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+        
+        // For now, default to 30fps
+        // TODO: Implement proper frame rate detection from video metadata
+        return 30;
+    } catch (error) {
+        console.warn('Could not detect frame rate:', error);
+        return 30;
+    }
+}
+
+// Generate video metadata
+async getDetailedVideoInfo(filePath) {
+    try {
+        const videoUrl = this.getFileUrl(filePath);
+        
+        return new Promise((resolve, reject) => {
+            const video = document.createElement('video');
+            
+            video.addEventListener('loadedmetadata', () => {
+                const frameRate = this.detectFrameRate(video);
+                const totalFrames = Math.floor(video.duration * frameRate);
+                
+                resolve({
+                    duration: video.duration * 1000, // Convert to milliseconds
+                    durationSeconds: video.duration,
+                    width: video.videoWidth,
+                    height: video.videoHeight,
+                    aspectRatio: video.videoWidth / video.videoHeight,
+                    frameRate: frameRate,
+                    totalFrames: totalFrames,
+                    hasAudio: video.mozHasAudio !== false, // Firefox property
+                    buffered: video.buffered,
+                    seekable: video.seekable
+                });
+            });
+            
+            video.addEventListener('error', (e) => {
+                reject(new Error(`Could not load video metadata: ${video.error?.message || 'Unknown error'}`));
+            });
+            
+            video.src = videoUrl;
+            video.load();
+        });
+    } catch (error) {
+        console.error('Failed to get detailed video info:', error);
+        return null;
+    }
+}
+
+// Enhanced preview with timeline
+previewVideoWithTimeline(filePath, timelineCanvas) {
+    if (this.videoPreview && filePath) {
+        const videoUrl = this.getFileUrl(filePath);
+        this.videoPreview.src = videoUrl;
+        
+        // Show video section
+        const videoSection = document.getElementById('video-preview-section');
+        videoSection.style.display = 'flex';
+        
+        // Initialize timeline if canvas provided
+        if (timelineCanvas) {
+            this.initializeVideoTimeline(this.videoPreview, timelineCanvas);
+        }
+    }
+}
+
+// Initialize video timeline integration
+initializeVideoTimeline(video, canvas) {
+    // Create timeline instance
+    if (this.videoTimeline) {
+        this.videoTimeline.destroy();
+    }
+    
+    this.videoTimeline = new VideoTimeline(canvas, {
+        showFrameThumbnails: true,
+        showTimecode: true,
+        showFrameNumbers: true
+    });
+    
+    // Set up video timeline integration
+    video.addEventListener('loadedmetadata', () => {
+        this.videoTimeline.setVideo(video);
+    });
+    
+    // Update timeline during playback
+    video.addEventListener('timeupdate', () => {
+        this.videoTimeline.updatePlayback(!video.paused, video.currentTime);
+    });
+    
+    // Handle timeline events
+    this.videoTimeline.on('seek', (time) => {
+        video.currentTime = time;
+    });
+    
+    this.videoTimeline.on('frameStep', (data) => {
+        const frameRate = this.videoTimeline.frameRate;
+        this.seekToFrame(video, data.frame, frameRate);
+    });
+    
+    this.videoTimeline.on('playToggle', (data) => {
+        if (data.direction === 0) {
+            video.pause();
+        } else if (data.direction === 1) {
+            video.play();
+        } else if (data.direction === -1) {
+            // Reverse playback - simplified implementation
+            video.playbackRate = -1;
+            video.play();
+        }
+    });
+    
+    this.videoTimeline.on('trimChange', (trimPoints) => {
+        // Emit trim change event for cue updates
+        if (this.currentVideoCue) {
+            console.log('Video trim changed:', trimPoints);
+            // This would update the cue's start/end times
+            window.app?.uiManager?.updateCueTrimPoints?.(this.currentVideoCue.id, trimPoints);
+        }
+    });
+    
+    console.log('Video timeline initialized');
+}
+
+// Professional video controls
+stepFrame(video, direction) {
+    if (!video) return;
+    
+    const frameRate = this.videoTimeline?.frameRate || 30;
+    const currentFrame = Math.floor(video.currentTime * frameRate);
+    const newFrame = currentFrame + direction;
+    
+    this.seekToFrame(video, newFrame, frameRate);
+}
+
+// J/K/L professional controls
+// Fix for playback rate error in VideoEngine
+// Replace the setPlaybackRate method in src/js/video-engine.js
+
+setPlaybackRate(video, rate) {
+    if (!video) return;
+    
+    try {
+        if (rate === 0) {
+            video.pause();
+            this.stopReversePlayback();
+        } else if (rate > 0) {
+            // Forward playback
+            this.stopReversePlayback();
+            
+            // Check if the playback rate is supported
+            const supportedRates = this.getSupportedPlaybackRates(video);
+            const clampedRate = this.clampPlaybackRate(rate, supportedRates);
+            
+            if (clampedRate !== rate) {
+                console.warn(`Playback rate ${rate} not supported, using ${clampedRate}`);
+            }
+            
+            video.playbackRate = clampedRate;
+            video.play();
+        } else {
+            // Negative rate - use our reverse simulation
+            this.simulateReversePlayback(video, Math.abs(rate));
+        }
+    } catch (error) {
+        console.warn('Playback rate change failed, falling back to normal playback:', error);
+        // Fallback: just play normally
+        try {
+            video.playbackRate = 1.0;
+            if (rate !== 0) {
+                video.play();
+            }
+        } catch (fallbackError) {
+            console.error('Even fallback playback failed:', fallbackError);
+        }
+    }
+}
+
+// New method: Get supported playback rates
+getSupportedPlaybackRates(video) {
+    // Most browsers support these rates
+    const commonRates = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 4.0];
+    const supportedRates = [];
+    
+    // Test each rate to see if it's supported
+    const originalRate = video.playbackRate;
+    
+    for (const rate of commonRates) {
+        try {
+            video.playbackRate = rate;
+            if (Math.abs(video.playbackRate - rate) < 0.01) {
+                supportedRates.push(rate);
+            }
+        } catch (error) {
+            // Rate not supported
+        }
+    }
+    
+    // Restore original rate
+    try {
+        video.playbackRate = originalRate;
+    } catch (error) {
+        video.playbackRate = 1.0;
+    }
+    
+    return supportedRates.length > 0 ? supportedRates : [1.0];
+}
+
+// New method: Clamp playback rate to supported range
+clampPlaybackRate(requestedRate, supportedRates) {
+    if (supportedRates.includes(requestedRate)) {
+        return requestedRate;
+    }
+    
+    // Find closest supported rate
+    let closest = supportedRates[0];
+    let closestDiff = Math.abs(requestedRate - closest);
+    
+    for (const rate of supportedRates) {
+        const diff = Math.abs(requestedRate - rate);
+        if (diff < closestDiff) {
+            closest = rate;
+            closestDiff = diff;
+        }
+    }
+    
+    return closest;
+}
+
+// Enhanced reverse playback simulation with better error handling
+simulateReversePlayback(video, rate = 1) {
+    if (this.reversePlaybackInterval) {
+        clearInterval(this.reversePlaybackInterval);
+    }
+    
+    video.pause();
+    
+    const frameRate = this.videoTimeline?.frameRate || 30;
+    const frameTime = Math.max(16, 1000 / frameRate / rate); // Minimum 16ms (60fps)
+    
+    console.log(`Starting reverse playback at ${rate}x speed`);
+    
+    this.reversePlaybackInterval = setInterval(() => {
+        try {
+            if (video.currentTime <= 0) {
+                console.log('Reached beginning of video, stopping reverse playback');
+                this.stopReversePlayback();
+                return;
+            }
+            
+            const newTime = Math.max(0, video.currentTime - (1 / frameRate * rate));
+            video.currentTime = newTime;
+            
+            // Update timeline if available
+            if (this.videoTimeline) {
+                this.videoTimeline.updatePlayback(true, newTime);
+            }
+            
+        } catch (error) {
+            console.warn('Error during reverse playback:', error);
+            this.stopReversePlayback();
+        }
+    }, frameTime);
+}
+
+// Enhanced J/K/L controls with better error handling
+handleJKLControls(key, video) {
+    if (!video) return;
+    
+    try {
+        switch (key) {
+            case 'KeyJ':
+                // J key: Reverse or increase reverse speed
+                this.jklState = this.jklState || { direction: 0, speed: 1 };
+                
+                if (this.jklState.direction >= 0) {
+                    // Switch to reverse
+                    this.jklState.direction = -1;
+                    this.jklState.speed = 1;
+                } else {
+                    // Increase reverse speed
+                    this.jklState.speed = Math.min(4, this.jklState.speed * 2);
+                }
+                
+                this.setPlaybackRate(video, -this.jklState.speed);
+                break;
+                
+            case 'KeyK':
+                // K key: Pause
+                this.jklState = { direction: 0, speed: 1 };
+                this.setPlaybackRate(video, 0);
+                break;
+                
+            case 'KeyL':
+                // L key: Forward or increase forward speed
+                this.jklState = this.jklState || { direction: 0, speed: 1 };
+                
+                if (this.jklState.direction <= 0) {
+                    // Switch to forward
+                    this.jklState.direction = 1;
+                    this.jklState.speed = 1;
+                } else {
+                    // Increase forward speed
+                    this.jklState.speed = Math.min(4, this.jklState.speed * 2);
+                }
+                
+                this.setPlaybackRate(video, this.jklState.speed);
+                break;
+        }
+        
+        console.log(`JKL Control: ${key}, Direction: ${this.jklState?.direction}, Speed: ${this.jklState?.speed}`);
+        
+    } catch (error) {
+        console.error('JKL control error:', error);
+        // Reset to normal playback on error
+        try {
+            video.playbackRate = 1.0;
+            if (key !== 'KeyK') {
+                video.play();
+            }
+        } catch (fallbackError) {
+            console.error('Fallback playback failed:', fallbackError);
+        }
+    }
+}
+
+// Simulate reverse playback (since HTML5 video doesn't natively support it)
+simulateReversePlayback(video, rate = 1) {
+    if (this.reversePlaybackInterval) {
+        clearInterval(this.reversePlaybackInterval);
+    }
+    
+    video.pause();
+    
+    const frameRate = this.videoTimeline?.frameRate || 30;
+    const frameTime = 1000 / frameRate / rate; // Milliseconds per frame
+    
+    this.reversePlaybackInterval = setInterval(() => {
+        if (video.currentTime <= 0) {
+            clearInterval(this.reversePlaybackInterval);
+            this.reversePlaybackInterval = null;
+            return;
+        }
+        
+        video.currentTime = Math.max(0, video.currentTime - (1 / frameRate));
+    }, frameTime);
+}
+
+// Stop reverse playback
+stopReversePlayback() {
+    if (this.reversePlaybackInterval) {
+        clearInterval(this.reversePlaybackInterval);
+        this.reversePlaybackInterval = null;
+    }
+}
+
+// Enhanced playCue with timeline integration
+async playCueWithTimeline(cue, onComplete, onError) {
+    try {
+        this.currentVideoCue = cue; // Store reference for timeline integration
+        
+        // Use existing playCue but with enhanced features
+        await this.playCue(cue, onComplete, onError);
+        
+        // If we have a timeline, update it
+        if (this.videoTimeline && this.currentPlayingVideo) {
+            this.videoTimeline.setVideo(this.currentPlayingVideo);
+            
+            // Apply trim points if they exist
+            if (cue.startTime || cue.endTime) {
+                const duration = this.currentPlayingVideo.duration;
+                const startNormalized = (cue.startTime || 0) / 1000 / duration;
+                const endNormalized = cue.endTime ? (cue.endTime / 1000 / duration) : 1;
+                
+                this.videoTimeline.trimPoints = {
+                    start: startNormalized,
+                    end: endNormalized
+                };
+            }
+        }
+        
+    } catch (error) {
+        console.error('Enhanced video playback failed:', error);
+        if (onError) onError(error);
+    }
+}
+
+// Capture video frame as thumbnail
+async captureFrame(video, time) {
+    try {
+        // Create a canvas for frame capture
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Seek to the specified time
+        const originalTime = video.currentTime;
+        video.currentTime = time;
+        
+        await new Promise((resolve) => {
+            video.addEventListener('seeked', resolve, { once: true });
+        });
+        
+        // Draw the frame
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Restore original time
+        video.currentTime = originalTime;
+        
+        // Return as data URL
+        return canvas.toDataURL('image/jpeg', 0.8);
+        
+    } catch (error) {
+        console.error('Frame capture failed:', error);
+        return null;
+    }
+}
+
+// Get video buffering status
+getBufferingStatus(video) {
+    if (!video) return { buffered: 0, total: 0 };
+    
+    try {
+        const buffered = video.buffered;
+        const duration = video.duration;
+        
+        if (buffered.length === 0) return { buffered: 0, total: duration };
+        
+        // Calculate total buffered time
+        let totalBuffered = 0;
+        for (let i = 0; i < buffered.length; i++) {
+            totalBuffered += buffered.end(i) - buffered.start(i);
+        }
+        
+        return {
+            buffered: totalBuffered,
+            total: duration,
+            percentage: duration > 0 ? (totalBuffered / duration) * 100 : 0,
+            ranges: Array.from({ length: buffered.length }, (_, i) => ({
+                start: buffered.start(i),
+                end: buffered.end(i)
+            }))
+        };
+    } catch (error) {
+        console.error('Error getting buffering status:', error);
+        return { buffered: 0, total: 0 };
+    }
+}
+
+// Enhanced stop with timeline cleanup
+stopCueWithTimeline(cueId) {
+    this.stopCue(cueId);
+    this.stopReversePlayback();
+    
+    if (this.videoTimeline) {
+        this.videoTimeline.updatePlayback(false, 0);
+    }
+    
+    this.currentVideoCue = null;
+}
+
+// Enhanced stop all with timeline cleanup
+stopAllCuesWithTimeline() {
+    this.stopAllCues();
+    this.stopReversePlayback();
+    
+    if (this.videoTimeline) {
+        this.videoTimeline.updatePlayback(false, 0);
+    }
+    
+    this.currentVideoCue = null;
+}
+
+// Get frame-accurate position info
+getFrameInfo(video) {
+    if (!video) return null;
+    
+    const frameRate = this.videoTimeline?.frameRate || this.detectFrameRate(video);
+    const currentFrame = Math.floor(video.currentTime * frameRate);
+    const totalFrames = Math.floor(video.duration * frameRate);
+    
+    return {
+        currentTime: video.currentTime,
+        currentFrame: currentFrame,
+        totalFrames: totalFrames,
+        frameRate: frameRate,
+        timecode: this.formatTimecode(video.currentTime, frameRate),
+        progress: video.duration > 0 ? video.currentTime / video.duration : 0
+    };
+}
+
+// Format timecode (SMPTE format)
+formatTimecode(seconds, frameRate = 30) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const frames = Math.floor((seconds % 1) * frameRate);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
+}
+
+// Enhanced cleanup
+destroy() {
+    this.stopAllCuesWithTimeline();
+    
+    if (this.videoTimeline) {
+        this.videoTimeline.destroy();
+        this.videoTimeline = null;
+    }
+    
+    if (this.reversePlaybackInterval) {
+        clearInterval(this.reversePlaybackInterval);
+        this.reversePlaybackInterval = null;
+    }
+    
+    this.currentVideoCue = null;
+}
 
     // Cleanup method
     destroy() {

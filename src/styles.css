@@ -1038,4 +1038,814 @@ body {
         padding-left: 0;
         border-left: none;
     }
+    /* Video Timeline Styles - Add to src/styles.css */
+
+/* Video Timeline Container */
+.video-timeline-container {
+    position: relative;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.video-timeline-canvas {
+    width: 100%;
+    height: 120px;
+    display: block;
+    cursor: crosshair;
+    background: #1a1a1a;
+}
+
+.video-timeline-canvas:hover {
+    cursor: grab;
+}
+
+.video-timeline-canvas:active {
+    cursor: grabbing;
+}
+
+/* Timeline Controls */
+.timeline-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: #2d2d2d;
+    border-top: 1px solid #404040;
+}
+
+.timeline-controls button {
+    background: #404040;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: white;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.timeline-controls button:hover {
+    background: #505050;
+    border-color: #666;
+    transform: translateY(-1px);
+}
+
+.timeline-controls button:active {
+    background: #353535;
+    transform: translateY(0);
+}
+
+.timeline-controls button:disabled {
+    background: #2a2a2a;
+    border-color: #333;
+    color: #666;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Special styling for play button */
+#video-play-pause {
+    background: #28a745;
+    border-color: #1e7e34;
+    font-size: 16px;
+}
+
+#video-play-pause:hover:not(:disabled) {
+    background: #218838;
+}
+
+/* Timeline Info Display */
+.timeline-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    background: #1a1a1a;
+    border-top: 1px solid #404040;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 11px;
+    color: #b0b0b0;
+}
+
+.timeline-info span {
+    padding: 2px 4px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
+}
+
+#video-current-time {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+#video-frame-info {
+    color: #0d7377;
+}
+
+#video-duration {
+    color: #6c757d;
+}
+
+/* Enhanced Video Inspector */
+.inspector-group h3.video-enhanced {
+    color: #6c757d;
+    border-bottom-color: #6c757d;
+}
+
+.inspector-field.video-control {
+    background: rgba(108, 117, 125, 0.1);
+    border: 1px solid rgba(108, 117, 125, 0.3);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 8px;
+}
+
+.inspector-field.video-control label {
+    color: #6c757d;
+    font-weight: 600;
+}
+
+/* Timeline keyboard shortcuts help */
+.video-timeline-container::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #6c757d;
+    opacity: 0.5;
+}
+
+.video-timeline-container:hover::after {
+    opacity: 1;
+}
+
+/* Tooltip for timeline controls */
+.video-timeline-container[title] {
+    position: relative;
+}
+
+.video-timeline-container:hover::before {
+    content: attr(title);
+    position: absolute;
+    bottom: -35px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2d2d2d;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 1000;
+    border: 1px solid #404040;
+    pointer-events: none;
+}
+
+/* Timeline loading state */
+.timeline-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(26, 26, 26, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.timeline-loading::after {
+    content: '';
+    display: block;
+    width: 20px;
+    height: 20px;
+    margin-top: 8px;
+    border: 2px solid #6c757d;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+}
+
+/* Professional video controls styling */
+.timeline-controls {
+    background: linear-gradient(to bottom, #2d2d2d, #1a1a1a);
+}
+
+.timeline-controls button {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-controls button:hover {
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+/* Frame-accurate indicators */
+.frame-accurate-indicator {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: #0d7377;
+    color: white;
+    font-size: 8px;
+    padding: 1px 3px;
+    border-radius: 2px;
+    font-weight: bold;
+}
+
+/* Timeline scrubbing states */
+.video-timeline-canvas.scrubbing {
+    cursor: grabbing !important;
+}
+
+.video-timeline-canvas.trimming {
+    cursor: col-resize !important;
+}
+
+/* Timeline zoom controls */
+.timeline-zoom-controls {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    display: flex;
+    gap: 2px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.video-timeline-container:hover .timeline-zoom-controls {
+    opacity: 1;
+}
+
+.timeline-zoom-controls button {
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.timeline-zoom-controls button:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+/* Timeline markers */
+.timeline-marker {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: #ffc107;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.timeline-marker.start-marker {
+    background: #28a745;
+}
+
+.timeline-marker.end-marker {
+    background: #dc3545;
+}
+
+/* Timeline waveform overlay for videos with audio */
+.timeline-audio-waveform {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* Responsive timeline */
+@media (max-width: 800px) {
+    .video-timeline-canvas {
+        height: 80px;
+    }
+    
+    .timeline-controls {
+        padding: 4px;
+        gap: 4px;
+    }
+    
+    .timeline-controls button {
+        padding: 4px 6px;
+        font-size: 12px;
+        min-width: 28px;
+        height: 28px;
+    }
+    
+    .timeline-info {
+        font-size: 10px;
+        padding: 2px 4px;
+    }
+    
+    .timeline-info span {
+        padding: 1px 2px;
+    }
+}
+
+/* High DPI display support */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .video-timeline-canvas {
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+    }
+}
+
+/* Timeline focus states for accessibility */
+.timeline-controls button:focus {
+    outline: 2px solid #0d7377;
+    outline-offset: 2px;
+}
+
+.video-timeline-canvas:focus {
+    outline: 2px solid #0d7377;
+    outline-offset: -2px;
+}
+
+/* Professional video editing theme */
+.inspector-section.video-focus {
+    background: linear-gradient(to bottom, #1a1a1a, #222);
+}
+
+.inspector-section.video-focus .section-header {
+    background: linear-gradient(to bottom, #2d2d2d, #404040);
+    border-bottom-color: #6c757d;
+}
+
+/* Timeline status indicators */
+.timeline-status {
+    position: absolute;
+    top: 4px;
+    right: 30px;
+    display: flex;
+    gap: 4px;
+    opacity: 0.8;
+}
+
+.timeline-status .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #dc3545;
+}
+
+.timeline-status .status-dot.playing {
+    background: #28a745;
+    animation: pulse 1s ease-in-out infinite alternate;
+}
+
+.timeline-status .status-dot.paused {
+    background: #ffc107;
+}
+
+.timeline-status .status-dot.loading {
+    background: #17a2b8;
+    animation: spin 1s linear infinite;
+}
+
+/* Keyboard shortcut hints */
+.keyboard-hints {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 2px 4px;
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.video-timeline-container:hover .keyboard-hints {
+    opacity: 1;
+}
+
+/* Timeline buffering indicator */
+.timeline-buffer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 4px;
+    background: rgba(108, 117, 125, 0.3);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.timeline-buffer.buffering {
+    background: linear-gradient(90deg, 
+        rgba(108, 117, 125, 0.3) 0%, 
+        rgba(108, 117, 125, 0.6) 50%, 
+        rgba(108, 117, 125, 0.3) 100%);
+    animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: -100% 0; }
+    100% { background-position: 100% 0; }
+}
+
+/* Enhanced trim handles */
+.trim-handle {
+    position: absolute;
+    top: 0;
+    width: 8px;
+    height: 100%;
+    background: linear-gradient(to bottom, #28a745, #1e7e34);
+    cursor: col-resize;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.trim-handle:hover {
+    opacity: 1;
+    background: linear-gradient(to bottom, #218838, #155724);
+}
+
+.trim-handle.start {
+    left: 0;
+    border-radius: 0 2px 2px 0;
+}
+
+.trim-handle.end {
+    right: 0;
+    border-radius: 2px 0 0 2px;
+}
+
+/* Video quality indicators */
+.video-quality-indicator {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(0, 0, 0, 0.6);
+    padding: 1px 3px;
+    border-radius: 2px;
+    font-family: monospace;
+}
+
+.video-quality-indicator.hd {
+    color: #28a745;
+}
+
+.video-quality-indicator.fourk {
+    color: #0d7377;
+}
+
+.video-quality-indicator.sd {
+    color: #ffc107;
+}
+/* Horizontal Video Timeline Layout - Add to src/styles.css */
+
+/* Video-focused layout modifications */
+.main-content.video-focused {
+    flex-direction: column;
+}
+
+.main-content.video-focused .cue-list-section {
+    flex: 0 0 200px; /* Fixed height when video focused */
+    border-right: none;
+    border-bottom: 1px solid #404040;
+}
+
+.main-content.video-focused .inspector-section {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Horizontal video inspector layout */
+.video-inspector-horizontal {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.video-timeline-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
+    background: #1a1a1a;
+    border-bottom: 1px solid #404040;
+}
+
+.video-properties-section {
+    flex: 0 0 auto;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #222;
+    padding: 16px;
+}
+
+/* Enhanced video timeline for horizontal layout */
+.video-timeline-horizontal {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 16px;
+}
+
+.video-preview-and-timeline {
+    display: flex;
+    flex: 1;
+    gap: 16px;
+    min-height: 200px;
+}
+
+.video-preview-container-horizontal {
+    flex: 0 0 400px;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.video-timeline-container-horizontal {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    min-height: 150px;
+}
+
+/* Timeline canvas in horizontal mode */
+.video-timeline-canvas-horizontal {
+    flex: 1;
+    width: 100%;
+    min-height: 120px;
+    background: #1a1a1a;
+    cursor: crosshair;
+}
+
+/* Horizontal timeline controls */
+.timeline-controls-horizontal {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #2d2d2d;
+    border-top: 1px solid #404040;
+}
+
+.timeline-controls-horizontal .control-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border-right: 1px solid #404040;
+}
+
+.timeline-controls-horizontal .control-group:last-child {
+    border-right: none;
+}
+
+/* Video properties in horizontal layout */
+.video-properties-horizontal {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    padding: 16px;
+}
+
+.property-group {
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    padding: 12px;
+}
+
+.property-group h4 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #b0b0b0;
+    border-bottom: 1px solid #404040;
+    padding-bottom: 4px;
+}
+
+/* Compact property fields for horizontal layout */
+.property-field {
+    margin-bottom: 8px;
+}
+
+.property-field label {
+    display: block;
+    font-size: 10px;
+    color: #b0b0b0;
+    margin-bottom: 2px;
+}
+
+.property-field input,
+.property-field select {
+    width: 100%;
+    background: #2d2d2d;
+    border: 1px solid #404040;
+    border-radius: 2px;
+    color: white;
+    padding: 4px 6px;
+    font-size: 11px;
+}
+
+.property-field input:focus,
+.property-field select:focus {
+    outline: none;
+    border-color: #6c757d;
+}
+
+/* Timeline info in horizontal layout */
+.timeline-info-horizontal {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 16px;
+    background: #1a1a1a;
+    border-top: 1px solid #404040;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 11px;
+}
+
+.timeline-info-horizontal .info-group {
+    display: flex;
+    gap: 16px;
+}
+
+.timeline-info-horizontal .info-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.timeline-info-horizontal .info-label {
+    font-size: 8px;
+    color: #666;
+    text-transform: uppercase;
+}
+
+.timeline-info-horizontal .info-value {
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.timeline-info-horizontal .info-value.current-time {
+    color: #ffc107;
+}
+
+.timeline-info-horizontal .info-value.frame-info {
+    color: #0d7377;
+}
+
+.timeline-info-horizontal .info-value.duration {
+    color: #6c757d;
+}
+
+/* Video focus toggle button */
+.video-layout-toggle {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #404040;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: white;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 10px;
+    z-index: 100;
+}
+
+.video-layout-toggle:hover {
+    background: #505050;
+}
+
+.video-layout-toggle.active {
+    background: #6c757d;
+    border-color: #868e96;
+}
+
+/* Responsive adjustments for horizontal layout */
+@media (max-width: 1200px) {
+    .video-preview-and-timeline {
+        flex-direction: column;
+    }
+    
+    .video-preview-container-horizontal {
+        flex: 0 0 200px;
+    }
+    
+    .video-properties-horizontal {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+    }
+}
+
+@media (max-width: 800px) {
+    .video-properties-horizontal {
+        grid-template-columns: 1fr;
+    }
+    
+    .timeline-controls-horizontal {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    
+    .timeline-info-horizontal .info-group {
+        gap: 8px;
+    }
+}
+
+/* Smooth transitions between layouts */
+.main-content {
+    transition: flex-direction 0.3s ease;
+}
+
+.inspector-section {
+    transition: all 0.3s ease;
+}
+
+/* Video timeline focus state */
+.video-timeline-container-horizontal.focused {
+    border-color: #6c757d;
+    box-shadow: 0 0 0 2px rgba(108, 117, 125, 0.2);
+}
+
+/* Enhanced scrubbing feedback */
+.video-timeline-canvas-horizontal.scrubbing {
+    cursor: grabbing !important;
+    background: #222;
+}
+
+/* Professional video editing appearance */
+.video-inspector-horizontal {
+    background: linear-gradient(to bottom, #1a1a1a, #111);
+}
+
+.video-timeline-section {
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Timeline ruler enhancements */
+.timeline-ruler {
+    height: 20px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    position: relative;
+}
+
+.timeline-ruler .tick {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    background: #666;
+    height: 10px;
+}
+
+.timeline-ruler .tick.major {
+    height: 15px;
+    background: #999;
+}
+
+.timeline-ruler .tick-label {
+    position: absolute;
+    top: 15px;
+    font-size: 8px;
+    color: #999;
+    transform: translateX(-50%);
+}
 }
