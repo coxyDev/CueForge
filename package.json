@@ -1,6 +1,6 @@
 {
   "name": "cueforge",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Professional show control software - CueForge for Windows",
   "main": "main.js",
   "scripts": {
@@ -58,7 +58,8 @@
       "src/**/*",
       "assets/**/*",
       "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "settings.json"
     ],
     "extraResources": [
       {
@@ -82,6 +83,7 @@
           ]
         }
       ],
+      "icon": "assets/CueForge_Icon.ico",
       "requestedExecutionLevel": "asInvoker",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
@@ -122,7 +124,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "CueForge"
+      "shortcutName": "CueForge",
+      "installerIcon": "assets/CueForge_Icon.ico",
+      "uninstallerIcon": "assets/CueForge_Icon.ico"
     }
   },
   "engines": {
