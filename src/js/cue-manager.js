@@ -1,4 +1,10 @@
-const { v4: uuidv4 } = require('uuid');
+// UUID v4 generator function - replaces the require('uuid') dependency
+function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
 
 class CueManager {
     constructor() {
@@ -822,12 +828,11 @@ class CueManager {
 
         if (this.showPath) {
             try {
-                const { ipcRenderer } = require('electron');
-                const result = await ipcRenderer.invoke('save-show-dialog', showData);
+                const result = await window.qlabAPI.saveShow(showData);
                 
                 if (result.success) {
                     this.showPath = result.filePath;
-                    this.showName = require('path').basename(this.showPath, '.qlab');
+                    this.showName = window.electronAPI.path.basename(this.showPath, '.qlab');
                     this.unsavedChanges = false;
                     this.emit('showChanged', { showName: this.showName, saved: true });
                     return true;
@@ -846,8 +851,7 @@ class CueManager {
             // Stop everything first
             this.stop();
             
-            const { ipcRenderer } = require('electron');
-            const result = await ipcRenderer.invoke('load-show-file', filePath);
+            const result = await window.qlabAPI.loadShow(filePath);
             
             if (result.success) {
                 const showData = result.data;
@@ -857,7 +861,7 @@ class CueManager {
                 this.masterVolume = showData.settings?.masterVolume || 1.0;
                 this.autoContinueEnabled = showData.settings?.autoContinueEnabled !== false;
                 this.singleCueMode = showData.settings?.singleCueMode !== false;
-                this.showName = showData.name || require('path').basename(filePath, '.qlab');
+                this.showName = showData.name || window.electronAPI.path.basename(filePath, '.qlab');
                 this.showPath = filePath;
                 this.selectedCueId = null;
                 this.isPlaying = false;

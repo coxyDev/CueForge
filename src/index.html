@@ -162,15 +162,163 @@
     <!-- Audio Context (for playback) -->
     <div id="audio-container" style="display: none;"></div>
 
-    <!-- Scripts -->
-<script src="js/audio-analyzer.js"></script>
-<script src="js/waveform-renderer.js"></script>
-<script src="js/video-timeline.js"></script>  
-<script src="js/cue-manager.js"></script>
-<script src="js/audio-engine.js"></script>
-<script src="js/video-engine.js"></script>
-<script src="js/display-manager.js"></script>
-<script src="js/ui-manager.js"></script>
-<script src="js/app.js"></script>
+    <!-- Scripts in correct order -->
+    <script>
+        // Simple UUID replacement to avoid dependency issues
+        function generateUUID() {
+            return 'cue-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
+        
+        // Mock require function for modules that expect it
+        if (typeof require === 'undefined') {
+            window.require = function(module) {
+                if (module === 'uuid') {
+                    return { v4: generateUUID };
+                }
+                if (module === 'electron') {
+                    // Mock electron for browser testing
+                    return {
+                        ipcRenderer: {
+                            invoke: async (channel, ...args) => {
+                                console.warn('Electron IPC not available in browser:', channel, args);
+                                return { success: false, error: 'Electron not available' };
+                            },
+                            on: (channel, callback) => {
+                                console.warn('Electron IPC listener not available:', channel);
+                            }
+                        }
+                    };
+                }
+                if (module === 'path') {
+                    return {
+                        basename: (path, ext) => {
+                            const name = path.split(/[\\/]/).pop();
+                            return ext ? name.replace(new RegExp(ext + '$'), '') : name;
+                        }
+                    };
+                }
+                console.warn('Module not found:', module);
+                return {};
+            };
+        }
+        
+        // Initialize error handling
+        window.addEventListener('error', (e) => {
+            console.error('Global error:', e.error);
+        });
+        
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('Unhandled rejection:', e.reason);
+        });
+    </script>
+    
+    <!-- Core engine scripts -->
+    <script src="js/audio-analyzer.js"></script>
+    <script src="js/waveform-renderer.js"></script>
+    <script src="js/video-timeline.js"></script>  
+    <script src="js/cue-manager.js"></script>
+    <script src="js/audio-engine.js"></script>
+    <script src="js/video-engine.js"></script>
+    
+    <!-- Optional display manager (may not be available in all environments) -->
+    <script>
+        // Display manager placeholder if not available
+        if (typeof DisplayManager === 'undefined') {
+            console.log('DisplayManager not available - using fallback');
+            window.DisplayManager = class {
+                constructor() {
+                    this.initialized = true;
+                    this.currentRouting = 'preview';
+                }
+                
+                async detectDisplays() {
+                    return [];
+                }
+                
+                getDisplays() {
+                    return [];
+                }
+                
+                getCurrentRouting() {
+                    return this.currentRouting;
+                }
+                
+                async setVideoRouting(target) {
+                    this.currentRouting = target;
+                    return true;
+                }
+                
+                getRoutingOptions() {
+                    return [{ id: 'preview', name: 'Preview Window', type: 'preview' }];
+                }
+                
+                async playVideoOnOutput(cue) {
+                    console.log('Playing video in preview mode (DisplayManager fallback)');
+                    if (window.videoEngine) {
+                        window.videoEngine.previewVideoInInspector(cue.filePath);
+                    }
+                    return true;
+                }
+                
+                async stopVideoOnOutput(cueId) {
+                    if (window.videoEngine) {
+                        window.videoEngine.hideVideoPreview();
+                    }
+                    return true;
+                }
+                
+                async clearAllDisplays() {
+                    if (window.videoEngine) {
+                        window.videoEngine.hideVideoPreview();
+                    }
+                }
+                
+                async showTestPattern() {
+                    console.log('Test pattern not available in fallback mode');
+                    return false;
+                }
+            };
+        }
+    </script>
+    <script src="js/display-manager.js"></script>
+    <script src="js/ui-manager.js"></script>
+    <script src="js/app.js"></script>
+    
+    <script>
+        // Additional error handling and startup checks
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, checking for required classes...');
+            
+            const requiredClasses = ['CueManager', 'AudioEngine', 'VideoEngine', 'UIManager'];
+            const missingClasses = requiredClasses.filter(className => typeof window[className] === 'undefined');
+            
+            if (missingClasses.length > 0) {
+                console.error('Missing required classes:', missingClasses);
+                document.body.innerHTML = `
+                    <div style="padding: 40px; text-align: center; color: #dc3545;">
+                        <h2>Application Error</h2>
+                        <p>Missing required classes: ${missingClasses.join(', ')}</p>
+                        <p>Please check that all JavaScript files are loaded correctly.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            console.log('All required classes available, initializing app...');
+        });
+        
+        // Development helpers
+        window.addEventListener('load', () => {
+            if (window.app && window.debug) {
+                console.log('%cQLab Clone loaded successfully!', 'color: #28a745; font-weight: bold; font-size: 16px;');
+                console.log('%cTry these debug commands:', 'color: #0d7377; font-weight: bold;');
+                console.log('  debug.addTestCue("audio", {name: "Test Audio"})');
+                console.log('  debug.addTestCue("video", {name: "Test Video"})');
+                console.log('  debug.addTestCue("wait", {duration: 3000, name: "3 Second Wait"})');
+                console.log('  debug.cueManager().go()');
+                console.log('  debug.stats()');
+            }
+        });
+    </script>
 </body>
 </html>

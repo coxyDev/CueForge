@@ -9,20 +9,23 @@ let mainWindow;
 let displayWindows = new Map(); // windowId -> BrowserWindow
 
 function createWindow() {
-    // Create the browser window
+    // Create the browser window with secure settings
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
         minWidth: 800,
         minHeight: 600,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            enableRemoteModule: true
+            nodeIntegration: false,           // Security: disable node integration
+            contextIsolation: true,           // Security: enable context isolation
+            enableRemoteModule: false,        // Security: disable remote module
+            preload: path.join(__dirname, 'preload.js'), // Fixed path - preload.js in root
+            webSecurity: true,                // Enable web security
+            allowRunningInsecureContent: false
         },
         titleBarStyle: 'default',
         show: false, // Don't show until ready
-        icon: path.join(__dirname, 'assets', 'icon.png') // Windows will use .ico if available
+        icon: path.join(__dirname, 'assets', 'icon.png')
     });
 
     // Load the app
@@ -31,6 +34,11 @@ function createWindow() {
     // Show window when ready to prevent visual flash
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
+        
+        // Debug: Check if preload script loaded
+        if (process.env.NODE_ENV === 'development') {
+            console.log('Main window ready, preload script should be active');
+        }
     });
 
     // Open DevTools in development
@@ -192,25 +200,78 @@ function createMenu() {
     Menu.setApplicationMenu(menu);
 }
 
-// IPC handlers for file operations
+// Secure File System IPC handlers
+ipcMain.handle('fs-readFile', async (event, filePath, options) => {
+    try {
+        console.log(`Reading file: ${filePath}`);
+        
+        // Security: Validate file path (basic check)
+        if (!filePath || typeof filePath !== 'string') {
+            throw new Error('Invalid file path');
+        }
+        
+        // Read file with error handling
+        const data = await fs.readFile(filePath, options);
+        return data;
+    } catch (error) {
+        console.error('File read error:', error.message);
+        throw new Error(`Failed to read file: ${error.message}`);
+    }
+});
+
+ipcMain.handle('fs-writeFile', async (event, filePath, data, options) => {
+    try {
+        console.log(`Writing file: ${filePath}`);
+        
+        // Security: Validate inputs
+        if (!filePath || typeof filePath !== 'string') {
+            throw new Error('Invalid file path');
+        }
+        
+        await fs.writeFile(filePath, data, options);
+        return { success: true };
+    } catch (error) {
+        console.error('File write error:', error.message);
+        throw new Error(`Failed to write file: ${error.message}`);
+    }
+});
+
+ipcMain.handle('fs-exists', async (event, filePath) => {
+    try {
+        return await fs.pathExists(filePath);
+    } catch (error) {
+        return false;
+    }
+});
+
+ipcMain.handle('fs-stat', async (event, filePath) => {
+    try {
+        return await fs.stat(filePath);
+    } catch (error) {
+        throw new Error(`Failed to stat file: ${error.message}`);
+    }
+});
+
+// IPC handlers for show operations
 ipcMain.handle('save-show-dialog', async (event, showData) => {
-    const result = await dialog.showSaveDialog(mainWindow, {
-        filters: [
-            { name: 'QLab Clone Shows', extensions: ['qlab'] },
-            { name: 'All Files', extensions: ['*'] }
-        ]
-    });
-    
-    if (!result.canceled) {
-        try {
+    try {
+        const result = await dialog.showSaveDialog(mainWindow, {
+            filters: [
+                { name: 'QLab Clone Shows', extensions: ['qlab'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+        
+        if (!result.canceled) {
             await fs.writeJson(result.filePath, showData, { spaces: 2 });
             return { success: true, filePath: result.filePath };
-        } catch (error) {
-            return { success: false, error: error.message };
         }
+        
+        return { success: false, cancelled: true };
+    } catch (error) {
+        console.error('Save show error:', error);
+        return { success: false, error: error.message };
     }
-    
-    return { success: false, cancelled: true };
 });
 
 ipcMain.handle('load-show-file', async (event, filePath) => {
@@ -218,40 +279,51 @@ ipcMain.handle('load-show-file', async (event, filePath) => {
         const showData = await fs.readJson(filePath);
         return { success: true, data: showData };
     } catch (error) {
+        console.error('Load show error:', error);
         return { success: false, error: error.message };
     }
 });
 
 ipcMain.handle('select-audio-file', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-        properties: ['openFile'],
-        filters: [
-            { name: 'Audio Files', extensions: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'] },
-            { name: 'All Files', extensions: ['*'] }
-        ]
-    });
-    
-    if (!result.canceled) {
-        return { success: true, filePath: result.filePaths[0] };
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openFile'],
+            filters: [
+                { name: 'Audio Files', extensions: ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a', 'wma'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+        
+        if (!result.canceled) {
+            return { success: true, filePath: result.filePaths[0] };
+        }
+        
+        return { success: false };
+    } catch (error) {
+        console.error('Select audio file error:', error);
+        return { success: false, error: error.message };
     }
-    
-    return { success: false };
 });
 
 ipcMain.handle('select-video-file', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-        properties: ['openFile'],
-        filters: [
-            { name: 'Video Files', extensions: ['mp4', 'avi', 'mov', 'wmv', 'mkv', 'webm', 'flv', 'm4v'] },
-            { name: 'All Files', extensions: ['*'] }
-        ]
-    });
-    
-    if (!result.canceled) {
-        return { success: true, filePath: result.filePaths[0] };
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openFile'],
+            filters: [
+                { name: 'Video Files', extensions: ['mp4', 'avi', 'mov', 'wmv', 'mkv', 'webm', 'flv', 'm4v'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+        
+        if (!result.canceled) {
+            return { success: true, filePath: result.filePaths[0] };
+        }
+        
+        return { success: false };
+    } catch (error) {
+        console.error('Select video file error:', error);
+        return { success: false, error: error.message };
     }
-    
-    return { success: false };
 });
 
 // Display Management IPC Handlers
@@ -262,13 +334,15 @@ ipcMain.handle('get-displays', async () => {
         
         return displays.map((display, index) => ({
             id: display.id,
+            name: display.label || `Display ${index + 1}`,
             label: display.label || `Display ${index + 1}`,
             bounds: display.bounds,
             workArea: display.workArea,
             scaleFactor: display.scaleFactor,
             rotation: display.rotation,
             primary: display === screen.getPrimaryDisplay(),
-            internal: display.internal || false
+            internal: display.internal || false,
+            resolution: `${display.bounds.width}x${display.bounds.height}`
         }));
     } catch (error) {
         console.error('Failed to get displays:', error);
@@ -292,9 +366,10 @@ ipcMain.handle('create-display-window', async (event, config) => {
             alwaysOnTop: true,
             skipTaskbar: true,
             webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false,
-                enableRemoteModule: true
+                nodeIntegration: false,
+                contextIsolation: true,
+                enableRemoteModule: false,
+                preload: path.join(__dirname, 'preload.js')
             },
             show: false,
             backgroundColor: '#000000'
@@ -356,8 +431,23 @@ ipcMain.handle('send-to-display', async (event, data) => {
     }
 });
 
+// Error handling for unhandled promises
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 // App event handlers
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+    createWindow();
+    
+    // Security: Prevent new window creation
+    app.on('web-contents-created', (event, contents) => {
+        contents.on('new-window', (event, navigationUrl) => {
+            event.preventDefault();
+            console.warn('Blocked new window creation to:', navigationUrl);
+        });
+    });
+});
 
 app.on('window-all-closed', () => {
     // On Windows and Linux, quit when all windows are closed

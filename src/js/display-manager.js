@@ -20,12 +20,12 @@ class DisplayManager {
 
     async detectDisplays() {
         try {
-            const { ipcRenderer } = require('electron');
-            this.displays = await ipcRenderer.invoke('get-displays');
+            // Use the secure API instead of direct ipcRenderer
+            this.displays = await window.qlabAPI.getDisplays();
             
             console.log(`Detected ${this.displays.length} display(s):`);
             this.displays.forEach((display, index) => {
-                console.log(`  ${index + 1}. ${display.label} - ${display.bounds.width}x${display.bounds.height} ${display.primary ? '(Primary)' : ''}`);
+                console.log(`  ${index + 1}. ${display.name} - ${display.resolution} ${display.primary ? '(Primary)' : ''}`);
             });
             
             return this.displays;
@@ -39,9 +39,9 @@ class DisplayManager {
     getDisplays() {
         return this.displays.map(display => ({
             id: display.id,
-            name: display.label,
+            name: display.name,
             primary: display.primary,
-            resolution: `${display.bounds.width}x${display.bounds.height}`,
+            resolution: display.resolution,
             bounds: display.bounds,
             internal: display.internal
         }));
@@ -78,7 +78,7 @@ class DisplayManager {
             if (windowId) {
                 this.outputWindows.set(display.id, windowId);
                 this.currentRouting = display.id;
-                console.log(`Video routing set to: ${display.label}`);
+                console.log(`Video routing set to: ${display.name}`);
                 return true;
             }
         } catch (error) {
@@ -90,37 +90,34 @@ class DisplayManager {
 
     async createOutputWindow(display) {
         try {
-            const { ipcRenderer } = require('electron');
-            
             const config = {
-                displayName: display.label,
+                displayName: display.name,
                 bounds: display.bounds,
-                resolution: `${display.bounds.width}x${display.bounds.height}`
+                resolution: display.resolution
             };
             
-            const windowId = await ipcRenderer.invoke('create-display-window', config);
-            console.log(`Created output window for ${display.label}: ${windowId}`);
+            // Use the secure API instead of direct ipcRenderer
+            const windowId = await window.qlabAPI.createDisplayWindow(config);
+            console.log(`Created output window for ${display.name}: ${windowId}`);
             
             // Show test pattern initially
             await this.sendToDisplay(windowId, {
                 type: 'test-pattern',
-                displayName: display.label,
+                displayName: display.name,
                 resolution: config.resolution
             });
             
             return windowId;
         } catch (error) {
-            console.error(`Failed to create output window for ${display.label}:`, error);
+            console.error(`Failed to create output window for ${display.name}:`, error);
             return null;
         }
     }
 
     async closeAllOutputWindows() {
-        const { ipcRenderer } = require('electron');
-        
         for (const [displayId, windowId] of this.outputWindows) {
             try {
-                await ipcRenderer.invoke('close-display-window', windowId);
+                await window.qlabAPI.closeDisplayWindow(windowId);
                 console.log(`Closed output window: ${windowId}`);
             } catch (error) {
                 console.warn(`Failed to close output window ${windowId}:`, error);
@@ -132,8 +129,8 @@ class DisplayManager {
 
     async sendToDisplay(windowId, content) {
         try {
-            const { ipcRenderer } = require('electron');
-            const success = await ipcRenderer.invoke('send-to-display', {
+            // Use the secure API instead of direct ipcRenderer
+            const success = await window.qlabAPI.sendToDisplay({
                 windowId: windowId,
                 content: content
             });
@@ -155,7 +152,9 @@ class DisplayManager {
         if (this.currentRouting === 'preview') {
             // Play in preview window (existing functionality)
             console.log('Playing video in preview window');
-            window.videoEngine.previewVideoInInspector(cue.filePath);
+            if (window.videoEngine && window.videoEngine.previewVideoInInspector) {
+                window.videoEngine.previewVideoInInspector(cue.filePath);
+            }
             return true;
         }
         
@@ -191,7 +190,9 @@ class DisplayManager {
     async stopVideoOnOutput(cueId) {
         if (this.currentRouting === 'preview') {
             // Stop preview video
-            window.videoEngine.hideVideoPreview();
+            if (window.videoEngine && window.videoEngine.hideVideoPreview) {
+                window.videoEngine.hideVideoPreview();
+            }
             return true;
         }
         
@@ -209,7 +210,7 @@ class DisplayManager {
 
     async clearAllDisplays() {
         // Clear preview
-        if (window.videoEngine) {
+        if (window.videoEngine && window.videoEngine.hideVideoPreview) {
             window.videoEngine.hideVideoPreview();
         }
         
@@ -236,8 +237,8 @@ class DisplayManager {
             const display = this.displays.find(d => d.id.toString() === displayId.toString());
             return await this.sendToDisplay(windowId, {
                 type: 'test-pattern',
-                displayName: display?.label || 'Unknown Display',
-                resolution: display ? `${display.bounds.width}x${display.bounds.height}` : 'Unknown'
+                displayName: display?.name || 'Unknown Display',
+                resolution: display ? display.resolution : 'Unknown'
             });
         }
         
@@ -254,9 +255,9 @@ class DisplayManager {
             if (!display.primary || this.displays.length > 1) {
                 options.push({
                     id: display.id,
-                    name: display.label,
+                    name: display.name,
                     type: 'external',
-                    resolution: `${display.bounds.width}x${display.bounds.height}`,
+                    resolution: display.resolution,
                     primary: display.primary
                 });
             }

@@ -1,66 +1,131 @@
 {
-  "name": "qlabclone",
+  "name": "qlab-clone",
   "version": "1.0.0",
-  "description": "Cross-platform QLab clone for show control and media playback",
+  "description": "Professional show control software - QLab clone for Windows",
   "main": "main.js",
   "scripts": {
-    "start": "electron . --no-sandbox",
-    "start-vm": "DISPLAY=:0 electron . --no-sandbox",
-    "start-headless": "xvfb-run -a electron . --no-sandbox",
-    "dev": "nodemon --exec 'electron . --no-sandbox'",
-    "dev-vm": "nodemon --exec 'DISPLAY=:0 electron . --no-sandbox'",
-    "dev-headless": "nodemon --exec 'xvfb-run -a electron . --no-sandbox'",
-    "sync-and-start": "rsync -av --exclude node_modules . ../local-copy/ && cd ../local-copy && npm start",
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron .",
     "build": "electron-builder",
-    "build-win": "electron-builder --win",
-    "build-mac": "electron-builder --mac",
-    "build-linux": "electron-builder --linux",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "dist": "npm run build",
+    "pack": "electron-builder --dir",
+    "clean": "rimraf dist build",
+    "rebuild": "electron-rebuild",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/qlab-clone.git"
   },
   "keywords": [
-    "qlab",
-    "show-control",
+    "show control",
+    "lighting",
     "audio",
-    "theater",
+    "video",
+    "theatre",
+    "qlab",
+    "windows",
     "electron"
   ],
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^9.1.2",
-    "electron": "^36.3.2",
-    "electron-builder": "^26.0.12",
-    "electron-debug": "^4.1.0",
-    "electron-reload": "^2.0.0-alpha.1",
-    "nodemon": "^3.1.10"
+    "cross-env": "^7.0.3",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "electron-rebuild": "^3.2.9",
+    "rimraf": "^5.0.5"
   },
   "dependencies": {
-    "fs-extra": "^11.3.0",
-    "sqlite3": "^5.1.7",
-    "uuid": "^11.1.0"
+    "fs-extra": "^11.1.1",
+    "lodash": "^4.17.21",
+    "uuid": "^9.0.1"
   },
   "build": {
-    "appId": "com.yourname.qlabclone",
+    "appId": "com.yourcompany.qlab-clone",
     "productName": "QLab Clone",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "build"
     },
     "files": [
       "main.js",
       "src/**/*",
-      "node_modules/**/*"
+      "assets/**/*",
+      "package.json"
     ],
-    "mac": {
-      "category": "public.app-category.music",
-      "target": "dmg"
-    },
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      }
+    ],
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.music",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "linux": {
-      "target": "AppImage",
-      "category": "AudioVideo"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "AudioVideo",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "QLab Clone"
     }
   },
   "engines": {
