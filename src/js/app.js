@@ -1,5 +1,5 @@
 // Main application initialization with improved error handling
-class QLABCloneApp {
+class CueForgeApp {
     constructor() {
         this.cueManager = null;
         this.audioEngine = null;
@@ -13,7 +13,7 @@ class QLABCloneApp {
 
     async init() {
         try {
-            console.log('Initializing QLab Clone...');
+            console.log('Initializing CueForge...');
             
             // Initialize core systems with error handling
             await this.initializeCoreComponents();
@@ -38,10 +38,10 @@ class QLABCloneApp {
             this.setupBasicPlayback();
             
             this.initialized = true;
-            console.log('QLab Clone initialized successfully');
+            console.log('CueForge initialized successfully');
             
         } catch (error) {
-            console.error('Failed to initialize QLab Clone:', error);
+            console.error('Failed to initialize CueForge:', error);
             this.showError('Failed to initialize application', error.message);
         }
     }
@@ -648,7 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error('Required classes not loaded:', missingClasses);
                 document.body.innerHTML = `
                     <div style="padding: 40px; text-align: center; color: #dc3545; background: #1a1a1a; min-height: 100vh;">
-                        <h2>QLab Clone - Loading Error</h2>
+                        <h2>CueForge - Loading Error</h2>
                         <p>Missing required classes: ${missingClasses.join(', ')}</p>
                         <p>Please check that all JavaScript files are loaded correctly.</p>
                         <button onclick="location.reload()" style="
@@ -663,7 +663,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('All required classes loaded successfully');
             
             // Initialize the main application
-            window.app = new QLABCloneApp();
+            window.app = new CueForgeApp();
             
             // Expose app globally for debugging
             window.qlabClone = window.app;
@@ -696,7 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to initialize application:', error);
             document.body.innerHTML = `
                 <div style="padding: 40px; text-align: center; color: #dc3545; background: #1a1a1a; min-height: 100vh;">
-                    <h2>QLab Clone - Initialization Error</h2>
+                    <h2>CueForge - Initialization Error</h2>
                     <p>${error.message}</p>
                     <button onclick="location.reload()" style="
                         background: #28a745; border: none; color: white; 

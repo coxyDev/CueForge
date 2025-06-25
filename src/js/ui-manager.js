@@ -4,11 +4,15 @@ class UIManager {
         this.audioEngine = audioEngine;
         this.elements = {};
         this.selectedCueElement = null;
+        this.apiAvailable = false;
         
         // Audio enhancement components
         this.audioAnalyzer = new AudioAnalyzer();
         this.waveformRenderer = null;
         this.currentWaveformCue = null;
+        
+        // Check API availability first
+        this.checkAPIAvailability();
         
         this.initializeElements();
         this.bindEvents();
@@ -21,6 +25,70 @@ class UIManager {
         this.setupMasterVolumeControl();
 
         this.videoTimelineUpdateInterval = null;
+    }
+
+    checkAPIAvailability() {
+        console.log('Checking API availability...');
+        
+        const requiredAPIs = ['electronAPI', 'fs', 'qlabAPI'];
+        const availableAPIs = {};
+        let allAvailable = true;
+        
+        requiredAPIs.forEach(api => {
+            const available = typeof window[api] !== 'undefined' && window[api] !== null;
+            availableAPIs[api] = available;
+            if (!available) {
+                allAvailable = false;
+                console.error(`${api} is not available`);
+            } else {
+                console.log(`${api} is available`);
+            }
+        });
+        
+        this.apiAvailable = allAvailable;
+        
+        if (!this.apiAvailable) {
+            console.error('Some APIs are missing. This will prevent file operations.');
+            console.log('Available APIs:', availableAPIs);
+            
+            // Show warning to user
+            this.showAPIWarning();
+        } else {
+            console.log('All APIs are available');
+        }
+        
+        return this.apiAvailable;
+    }
+
+    showAPIWarning() {
+        // Create a warning banner
+        const warningBanner = document.createElement('div');
+        warningBanner.id = 'api-warning';
+        warningBanner.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #dc3545;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        `;
+        warningBanner.innerHTML = `
+            <strong>API Error:</strong> Preload script failed to load. File operations will not work. 
+            Check console for details. <button onclick="this.parentElement.remove()" style="margin-left: 10px; background: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 2px 8px; cursor: pointer;">×</button>
+        `;
+        
+        document.body.insertBefore(warningBanner, document.body.firstChild);
+        
+        // Auto-remove after 10 seconds
+        setTimeout(() => {
+            if (warningBanner && warningBanner.parentElement) {
+                warningBanner.remove();
+            }
+        }, 10000);
     }
 
     ensureSettingsModalHidden() {
@@ -196,7 +264,7 @@ class UIManager {
 
     setupMenuHandlers() {
         // Set up menu event handler using the new secure API
-        if (window.qlabAPI && window.qlabAPI.onMenuEvent) {
+        if (this.apiAvailable && window.qlabAPI && window.qlabAPI.onMenuEvent) {
             this.menuUnsubscriber = window.qlabAPI.onMenuEvent((channel, ...args) => {
                 switch (channel) {
                     case 'menu-new-show':
@@ -225,14 +293,26 @@ class UIManager {
                         break;
                 }
             });
+        } else {
+            console.warn('Menu handlers not set up - API not available');
         }
     }
 
     addCue(type) {
+        console.log(`Attempting to add ${type} cue...`);
+        
+        if (!this.apiAvailable) {
+            console.error('Cannot add cue: APIs not available');
+            alert('Cannot add cue: Preload script failed to load. Please restart the application.');
+            return;
+        }
+        
         let options = {};
         
         if (type === 'audio') {
+            console.log('Adding audio cue...');
             this.selectAudioFile().then((result) => {
+                console.log('Audio file selection result:', result);
                 if (result.success) {
                     options.filePath = result.filePath;
                     options.name = window.electronAPI.path.basename(result.filePath, window.electronAPI.path.extname(result.filePath));
@@ -243,15 +323,24 @@ class UIManager {
                         }
                         const cue = this.cueManager.addCue(type, options);
                         this.cueManager.selectCue(cue.id);
+                        console.log('Audio cue added successfully:', cue);
                     }).catch((error) => {
                         console.warn('Could not get audio file info:', error);
                         const cue = this.cueManager.addCue(type, options);
                         this.cueManager.selectCue(cue.id);
+                        console.log('Audio cue added without duration info:', cue);
                     });
+                } else {
+                    console.log('Audio file selection cancelled or failed');
                 }
+            }).catch((error) => {
+                console.error('Error selecting audio file:', error);
+                alert('Error selecting audio file: ' + error.message);
             });
         } else if (type === 'video') {
+            console.log('Adding video cue...');
             this.selectVideoFile().then((result) => {
+                console.log('Video file selection result:', result);
                 if (result.success) {
                     options.filePath = result.filePath;
                     options.name = window.electronAPI.path.basename(result.filePath, window.electronAPI.path.extname(result.filePath));
@@ -263,34 +352,58 @@ class UIManager {
                         const cue = this.cueManager.addCue(type, options);
                         this.cueManager.selectCue(cue.id);
                         window.videoEngine.previewVideoInInspector(result.filePath);
+                        console.log('Video cue added successfully:', cue);
                     }).catch((error) => {
                         console.warn('Could not get video file info:', error);
                         const cue = this.cueManager.addCue(type, options);
                         this.cueManager.selectCue(cue.id);
+                        console.log('Video cue added without duration info:', cue);
                     });
+                } else {
+                    console.log('Video file selection cancelled or failed');
                 }
+            }).catch((error) => {
+                console.error('Error selecting video file:', error);
+                alert('Error selecting video file: ' + error.message);
             });
         } else {
+            // For wait and group cues, no file selection needed
+            console.log(`Adding ${type} cue (no file required)...`);
             const cue = this.cueManager.addCue(type, options);
             this.cueManager.selectCue(cue.id);
+            console.log(`${type} cue added successfully:`, cue);
         }
     }
 
     async selectAudioFile() {
+        if (!this.apiAvailable || !window.qlabAPI) {
+            throw new Error('qlabAPI not available');
+        }
+        
         try {
-            return await window.qlabAPI.selectAudioFile();
+            console.log('Calling qlabAPI.selectAudioFile()...');
+            const result = await window.qlabAPI.selectAudioFile();
+            console.log('selectAudioFile result:', result);
+            return result;
         } catch (error) {
-            console.error('Error selecting audio file:', error);
-            return { success: false };
+            console.error('Error in selectAudioFile:', error);
+            throw error;
         }
     }
 
     async selectVideoFile() {
+        if (!this.apiAvailable || !window.qlabAPI) {
+            throw new Error('qlabAPI not available');
+        }
+        
         try {
-            return await window.qlabAPI.selectVideoFile();
+            console.log('Calling qlabAPI.selectVideoFile()...');
+            const result = await window.qlabAPI.selectVideoFile();
+            console.log('selectVideoFile result:', result);
+            return result;
         } catch (error) {
-            console.error('Error selecting video file:', error);
-            return { success: false };
+            console.error('Error in selectVideoFile:', error);
+            throw error;
         }
     }
 
@@ -601,7 +714,7 @@ class UIManager {
                 autoContinueCheckbox.checked = this.cueManager.getAutoContinueEnabled();
             }
             
-            if (window.displayManager) {
+            if (this.apiAvailable && window.displayManager) {
                 const displays = await window.qlabAPI.getDisplays();
                 
                 const displaysList = document.getElementById('displays-list');
@@ -638,7 +751,7 @@ class UIManager {
             } else {
                 const displaysList = document.getElementById('displays-list');
                 if (displaysList) {
-                    displaysList.innerHTML = '<p>Display manager not available</p>';
+                    displaysList.innerHTML = '<p>Display manager not available (API error)</p>';
                 }
             }
             
@@ -676,7 +789,7 @@ class UIManager {
         }
 
         // Video routing
-        if (videoRoutingSelect && window.displayManager) {
+        if (videoRoutingSelect && window.displayManager && this.apiAvailable) {
             videoRoutingSelect.addEventListener('change', async (e) => {
                 const success = await window.displayManager.setVideoRouting(e.target.value);
                 if (success) {
@@ -687,7 +800,7 @@ class UIManager {
         }
 
         // Test pattern button
-        if (testPatternBtn && window.displayManager) {
+        if (testPatternBtn && window.displayManager && this.apiAvailable) {
             testPatternBtn.addEventListener('click', async () => {
                 const currentRouting = window.displayManager.getCurrentRouting();
                 if (currentRouting !== 'preview') {
@@ -699,7 +812,7 @@ class UIManager {
         }
 
         // Clear displays button
-        if (clearDisplaysBtn && window.displayManager) {
+        if (clearDisplaysBtn && window.displayManager && this.apiAvailable) {
             clearDisplaysBtn.addEventListener('click', async () => {
                 await window.displayManager.clearAllDisplays();
             });
@@ -793,7 +906,7 @@ class UIManager {
                         <div class="inspector-field">
                             <label>File</label>
                             <input type="text" id="audio-filepath" value="${selectedCue.filePath || ''}" readonly>
-                            <button id="select-audio-file">Browse...</button>
+                            <button id="select-audio-file" ${!this.apiAvailable ? 'disabled title="API not available"' : ''}>Browse...</button>
                         </div>
                         ${selectedCue.filePath ? `
                         <div class="inspector-field">
@@ -846,7 +959,7 @@ class UIManager {
                         <div class="inspector-field">
                             <label>File</label>
                             <input type="text" id="video-filepath" value="${selectedCue.filePath || ''}" readonly>
-                            <button id="select-video-file">Browse...</button>
+                            <button id="select-video-file" ${!this.apiAvailable ? 'disabled title="API not available"' : ''}>Browse...</button>
                         </div>
                     </div>
                     <div class="inspector-group">
@@ -1002,20 +1115,25 @@ class UIManager {
         const audioFadeOut = document.getElementById('audio-fadeout');
         const audioLoop = document.getElementById('audio-loop');
 
-        if (selectAudioFile) {
+        if (selectAudioFile && !selectAudioFile.disabled) {
             selectAudioFile.addEventListener('click', async () => {
-                const result = await this.selectAudioFile();
-                if (result.success) {
-                    const updates = { filePath: result.filePath };
-                    try {
-                        const audioInfo = await this.audioEngine.getAudioFileInfo(result.filePath);
-                        if (audioInfo) {
-                            updates.duration = audioInfo.duration;
+                try {
+                    const result = await this.selectAudioFile();
+                    if (result.success) {
+                        const updates = { filePath: result.filePath };
+                        try {
+                            const audioInfo = await this.audioEngine.getAudioFileInfo(result.filePath);
+                            if (audioInfo) {
+                                updates.duration = audioInfo.duration;
+                            }
+                        } catch (error) {
+                            console.warn('Could not get audio file info:', error);
                         }
-                    } catch (error) {
-                        console.warn('Could not get audio file info:', error);
+                        this.cueManager.updateCue(selectedCue.id, updates);
                     }
-                    this.cueManager.updateCue(selectedCue.id, updates);
+                } catch (error) {
+                    console.error('Error selecting audio file:', error);
+                    alert('Error selecting audio file: ' + error.message);
                 }
             });
         }
@@ -1084,21 +1202,26 @@ class UIManager {
         const videoFullscreen = document.getElementById('video-fullscreen');
         const videoLoop = document.getElementById('video-loop');
 
-        if (selectVideoFile) {
+        if (selectVideoFile && !selectVideoFile.disabled) {
             selectVideoFile.addEventListener('click', async () => {
-                const result = await this.selectVideoFile();
-                if (result.success) {
-                    const updates = { filePath: result.filePath };
-                    try {
-                        const videoInfo = await window.videoEngine.getVideoFileInfo(result.filePath);
-                        if (videoInfo) {
-                            updates.duration = videoInfo.duration;
+                try {
+                    const result = await this.selectVideoFile();
+                    if (result.success) {
+                        const updates = { filePath: result.filePath };
+                        try {
+                            const videoInfo = await window.videoEngine.getVideoFileInfo(result.filePath);
+                            if (videoInfo) {
+                                updates.duration = videoInfo.duration;
+                            }
+                        } catch (error) {
+                            console.warn('Could not get video file info:', error);
                         }
-                    } catch (error) {
-                        console.warn('Could not get video file info:', error);
+                        this.cueManager.updateCue(selectedCue.id, updates);
+                        window.videoEngine.previewVideoInInspector(result.filePath);
                     }
-                    this.cueManager.updateCue(selectedCue.id, updates);
-                    window.videoEngine.previewVideoInInspector(result.filePath);
+                } catch (error) {
+                    console.error('Error selecting video file:', error);
+                    alert('Error selecting video file: ' + error.message);
                 }
             });
         }
@@ -1517,6 +1640,325 @@ class UIManager {
             this.waveformRenderer.destroy();
             this.waveformRenderer = null;
         }
+    }
+
+    // ADD these methods to your UIManager class and UPDATE setupMenuHandlers
+
+    setupMenuHandlers() {
+        // Set up menu event handler using the new secure API
+        if (this.apiAvailable && window.qlabAPI && window.qlabAPI.onMenuEvent) {
+            this.menuUnsubscriber = window.qlabAPI.onMenuEvent((channel, ...args) => {
+                switch (channel) {
+                    case 'menu-new-show':
+                        this.newShow();
+                        break;
+                    case 'menu-open-show':
+                        this.cueManager.loadShow(args[0]);
+                        break;
+                    case 'menu-save-show':
+                        this.saveShow();
+                        break;
+                    case 'menu-save-show-as':
+                        this.saveShowAs();
+                        break;
+                    case 'menu-add-cue':
+                        this.addCue(args[0]);
+                        break;
+                    case 'menu-delete-cue':
+                        this.deleteSelectedCue();
+                        break;
+                    case 'menu-copy-cue':
+                        this.copyCue();
+                        break;
+                    case 'menu-cut-cue':
+                        this.cutCue();
+                        break;
+                    case 'menu-paste-cue':
+                        this.pasteCue();
+                        break;
+                    case 'menu-duplicate-cue':
+                        this.duplicateCue();
+                        break;
+                    case 'menu-select-all':
+                        this.selectAllCues();
+                        break;
+                    case 'menu-go':
+                        this.cueManager.go();
+                        break;
+                    case 'menu-stop':
+                        this.cueManager.stop();
+                        break;
+                    case 'menu-pause':
+                        this.cueManager.pause();
+                        break;
+                    case 'menu-emergency-stop':
+                        this.emergencyStopAll();
+                        break;
+                    case 'menu-show-settings':
+                        this.openSettings();
+                        break;
+                }
+            });
+        } else {
+            console.warn('Menu handlers not set up - API not available');
+        }
+    }
+
+    // File operations
+    newShow() {
+        if (this.cueManager.unsavedChanges) {
+            const proceed = confirm('You have unsaved changes. Create new show anyway?');
+            if (!proceed) return;
+        }
+        
+        this.cueManager.newShow();
+        console.log('New show created');
+    }
+
+    saveShow() {
+        this.cueManager.saveShow().then(success => {
+            if (success) {
+                this.showStatusMessage('Show saved successfully', 'success');
+            } else {
+                this.showStatusMessage('Failed to save show', 'error');
+            }
+        });
+    }
+
+    saveShowAs() {
+        this.cueManager.saveShowAs().then(success => {
+            if (success) {
+                this.showStatusMessage('Show saved successfully', 'success');
+            } else {
+                this.showStatusMessage('Save cancelled or failed', 'warning');
+            }
+        });
+    }
+
+    // Clipboard operations
+    copyCue() {
+        const success = this.cueManager.copyCue();
+        if (success) {
+            this.showStatusMessage('Cue copied to clipboard', 'success');
+        } else {
+            this.showStatusMessage('No cue selected to copy', 'warning');
+        }
+    }
+
+    cutCue() {
+        const success = this.cueManager.cutCue();
+        if (success) {
+            this.showStatusMessage('Cue cut to clipboard', 'success');
+        } else {
+            this.showStatusMessage('No cue selected to cut', 'warning');
+        }
+    }
+
+    pasteCue() {
+        const newCue = this.cueManager.pasteCue();
+        if (newCue) {
+            this.showStatusMessage(`Pasted cue: ${newCue.name}`, 'success');
+        } else {
+            this.showStatusMessage('No cue in clipboard to paste', 'warning');
+        }
+    }
+
+    duplicateCue() {
+        const duplicatedCue = this.cueManager.duplicateCue();
+        if (duplicatedCue) {
+            this.showStatusMessage(`Duplicated cue: ${duplicatedCue.name}`, 'success');
+        } else {
+            this.showStatusMessage('No cue selected to duplicate', 'warning');
+        }
+    }
+
+    selectAllCues() {
+        this.cueManager.selectAllCues();
+        this.showStatusMessage('All cues selected', 'info');
+    }
+
+    emergencyStopAll() {
+        this.cueManager.emergencyStopAll();
+        this.showStatusMessage('🚨 EMERGENCY STOP ALL 🚨', 'error');
+    }
+
+    // Enhanced keyboard shortcuts
+    handleGlobalKeydown(e) {
+        // Handle clipboard shortcuts
+        if (e.ctrlKey || e.metaKey) {
+            switch (e.code) {
+                case 'KeyC':
+                    if (!this.isInputFocused(e.target)) {
+                        e.preventDefault();
+                        this.copyCue();
+                    }
+                    break;
+                case 'KeyX':
+                    if (!this.isInputFocused(e.target)) {
+                        e.preventDefault();
+                        this.cutCue();
+                    }
+                    break;
+                case 'KeyV':
+                    if (!this.isInputFocused(e.target)) {
+                        e.preventDefault();
+                        this.pasteCue();
+                    }
+                    break;
+                case 'KeyD':
+                    if (!this.isInputFocused(e.target)) {
+                        e.preventDefault();
+                        this.duplicateCue();
+                    }
+                    break;
+                case 'KeyA':
+                    if (!this.isInputFocused(e.target)) {
+                        e.preventDefault();
+                        this.selectAllCues();
+                    }
+                    break;
+                case 'KeyS':
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                        this.saveShowAs();
+                    } else {
+                        this.saveShow();
+                    }
+                    break;
+                case 'KeyN':
+                    e.preventDefault();
+                    this.newShow();
+                    break;
+                case 'KeyO':
+                    e.preventDefault();
+                    // Trigger file open dialog
+                    window.qlabAPI.selectAudioFile(); // This will be handled by main process
+                    break;
+            }
+        }
+
+        // Other shortcuts
+        switch (e.code) {
+            case 'Space':
+                if (!this.isInputFocused(e.target)) {
+                    e.preventDefault();
+                    console.log('Space pressed - GO');
+                    this.cueManager.go();
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('ESC pressed - emergency stop');
+                this.emergencyStopAll();
+                break;
+            case 'Delete':
+            case 'Backspace':
+                if (!this.isInputFocused(e.target)) {
+                    e.preventDefault();
+                    this.deleteSelectedCue();
+                }
+                break;
+            case 'ArrowUp':
+                if (!this.isInputFocused(e.target)) {
+                    e.preventDefault();
+                    this.selectPreviousCue();
+                }
+                break;
+            case 'ArrowDown':
+                if (!this.isInputFocused(e.target)) {
+                    e.preventDefault();
+                    this.selectNextCue();
+                }
+                break;
+            case 'Enter':
+                if (!this.isInputFocused(e.target)) {
+                    e.preventDefault();
+                    console.log('Enter pressed - GO on selected cue');
+                    this.cueManager.go();
+                }
+                break;
+        }
+
+        // Handle Ctrl+Period for stop
+        if ((e.ctrlKey || e.metaKey) && e.code === 'Period') {
+            e.preventDefault();
+            console.log('Ctrl+. pressed - STOP');
+            this.cueManager.stop();
+        }
+
+        // Handle Ctrl+P for pause
+        if ((e.ctrlKey || e.metaKey) && e.code === 'KeyP') {
+            e.preventDefault();
+            console.log('Ctrl+P pressed - PAUSE');
+            this.cueManager.pause();
+        }
+    }
+
+    // Helper to check if an input field is focused
+    isInputFocused(target) {
+        return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.contentEditable === 'true';
+    }
+
+    // Status message system
+    showStatusMessage(message, type = 'info') {
+        console.log(`Status [${type}]: ${message}`);
+        
+        // Remove existing status messages
+        const existingStatus = document.querySelector('.status-message');
+        if (existingStatus) {
+            existingStatus.remove();
+        }
+
+        // Create status message element
+        const statusElement = document.createElement('div');
+        statusElement.className = `status-message status-${type}`;
+        statusElement.textContent = message;
+        statusElement.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            z-index: 10000;
+            transition: all 0.3s ease;
+            pointer-events: none;
+        `;
+
+        // Set colors based on type
+        switch (type) {
+            case 'success':
+                statusElement.style.backgroundColor = '#28a745';
+                break;
+            case 'error':
+                statusElement.style.backgroundColor = '#dc3545';
+                break;
+            case 'warning':
+                statusElement.style.backgroundColor = '#ffc107';
+                statusElement.style.color = '#000';
+                break;
+            case 'info':
+            default:
+                statusElement.style.backgroundColor = '#17a2b8';
+                break;
+        }
+
+        document.body.appendChild(statusElement);
+
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            if (statusElement.parentElement) {
+                statusElement.style.opacity = '0';
+                statusElement.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (statusElement.parentElement) {
+                        statusElement.remove();
+                    }
+                }, 300);
+            }
+        }, 3000);
     }
 }
 

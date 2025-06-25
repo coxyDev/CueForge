@@ -847,52 +847,58 @@ class CueManager {
     }
 
     async loadShow(filePath) {
-        try {
-            // Stop everything first
-            this.stop();
+    try {
+        // Stop everything first
+        this.stop();
+        
+        const result = await window.qlabAPI.loadShow(filePath);
+        
+        if (result.success) {
+            const showData = result.data;
             
-            const result = await window.qlabAPI.loadShow(filePath);
+            this.cues = showData.cues || [];
+            this.currentCueIndex = showData.settings?.currentCueIndex || -1;
+            this.masterVolume = showData.settings?.masterVolume || 1.0;
+            this.autoContinueEnabled = showData.settings?.autoContinueEnabled !== false;
+            this.singleCueMode = showData.settings?.singleCueMode !== false;
             
-            if (result.success) {
-                const showData = result.data;
-                
-                this.cues = showData.cues || [];
-                this.currentCueIndex = showData.settings?.currentCueIndex || -1;
-                this.masterVolume = showData.settings?.masterVolume || 1.0;
-                this.autoContinueEnabled = showData.settings?.autoContinueEnabled !== false;
-                this.singleCueMode = showData.settings?.singleCueMode !== false;
-                this.showName = showData.name || window.electronAPI.path.basename(filePath, '.qlab');
-                this.showPath = filePath;
-                this.selectedCueId = null;
-                this.isPlaying = false;
-                this.isPaused = false;
-                this.unsavedChanges = false;
-                this.executingCues.clear();
-                this.clearAllAutoContinueTimeouts();
+            // Get filename without extension for show name
+            const baseName = window.electronAPI.path.basename(filePath);
+            const extension = window.electronAPI.path.extname(filePath);
+            this.showName = showData.name || window.electronAPI.path.basename(filePath, extension);
+            
+            this.showPath = filePath;
+            this.selectedCueId = null;
+            this.isPlaying = false;
+            this.isPaused = false;
+            this.unsavedChanges = false;
+            this.executingCues.clear();
+            this.clearAllAutoContinueTimeouts();
 
-                // Apply master volume
-                this.setMasterVolume(this.masterVolume);
+            // Apply master volume
+            this.setMasterVolume(this.masterVolume);
 
-                this.emit('showChanged', { 
-                    showName: this.showName, 
-                    loaded: true,
-                    cues: this.cues
-                });
-                
-                this.emit('settingsChanged', {
-                    singleCueMode: this.singleCueMode,
-                    autoContinueEnabled: this.autoContinueEnabled
-                });
-                
-                return true;
-            }
-        } catch (error) {
-            console.error('Load error:', error);
-            return false;
+            this.emit('showChanged', { 
+                showName: this.showName, 
+                loaded: true,
+                cues: this.cues
+            });
+            
+            this.emit('settingsChanged', {
+                singleCueMode: this.singleCueMode,
+                autoContinueEnabled: this.autoContinueEnabled
+            });
+            
+            console.log(`Show loaded: ${this.showName} (${extension} format)`);
+            return true;
         }
-
+    } catch (error) {
+        console.error('Load error:', error);
         return false;
     }
+
+    return false;
+}
 
     markUnsaved() {
         this.unsavedChanges = true;
@@ -974,6 +980,246 @@ class CueManager {
             lastGoTime: this.lastGoTime,
             autoContinueTimeouts: this.autoContinueTimeouts.size
         };
+    }
+
+    // ADD these clipboard methods to your CueManager class
+
+    // Clipboard functionality
+    copiedCue = null; // Store copied cue data
+
+    copyCue(cueId = null) {
+        const targetCueId = cueId || this.selectedCueId;
+        if (!targetCueId) {
+            console.log('No cue selected to copy');
+            return false;
+        }
+
+        const cue = this.getCue(targetCueId);
+        if (!cue) {
+            console.log('Cue not found for copying');
+            return false;
+        }
+
+        // Create a deep copy of the cue (excluding ID and status)
+        this.copiedCue = {
+            ...cue,
+            // Remove these properties as they should be regenerated
+            id: undefined,
+            number: undefined,
+            status: 'ready',
+            created: undefined
+        };
+
+        console.log(`Copied cue: ${cue.name}`);
+        this.emit('cueClipboard', { action: 'copy', cue: this.copiedCue });
+        return true;
+    }
+
+    cutCue(cueId = null) {
+        const targetCueId = cueId || this.selectedCueId;
+        if (!targetCueId) {
+            console.log('No cue selected to cut');
+            return false;
+        }
+
+        // First copy the cue
+        if (this.copyCue(targetCueId)) {
+            // Then remove it
+            const cue = this.getCue(targetCueId);
+            console.log(`Cut cue: ${cue.name}`);
+            this.removeCue(targetCueId);
+            this.emit('cueClipboard', { action: 'cut', cue: this.copiedCue });
+            return true;
+        }
+
+        return false;
+    }
+
+    pasteCue(insertIndex = -1) {
+        if (!this.copiedCue) {
+            console.log('No cue in clipboard to paste');
+            return null;
+        }
+
+        // Determine insertion point
+        let targetIndex = insertIndex;
+        if (targetIndex === -1) {
+            if (this.selectedCueId) {
+                targetIndex = this.getCueIndex(this.selectedCueId) + 1;
+            } else {
+                targetIndex = this.cues.length;
+            }
+        }
+
+        // Create new cue with copied properties
+        const newCue = this.createCue(this.copiedCue.type, {
+            ...this.copiedCue,
+            name: this.copiedCue.name + ' Copy'
+        });
+
+        // Insert the cue
+        if (targetIndex >= this.cues.length) {
+            this.cues.push(newCue);
+            targetIndex = this.cues.length - 1;
+        } else {
+            this.cues.splice(targetIndex, 0, newCue);
+        }
+
+        console.log(`Pasted cue: ${newCue.name} at index ${targetIndex}`);
+        
+        // Select the newly pasted cue
+        this.selectCue(newCue.id);
+        
+        this.markUnsaved();
+        this.emit('cueAdded', { cue: newCue, index: targetIndex });
+        this.emit('cueClipboard', { action: 'paste', cue: newCue });
+        
+        return newCue;
+    }
+
+    duplicateCue(cueId = null) {
+        const targetCueId = cueId || this.selectedCueId;
+        if (!targetCueId) {
+            console.log('No cue selected to duplicate');
+            return null;
+        }
+
+        const cue = this.getCue(targetCueId);
+        if (!cue) {
+            console.log('Cue not found for duplication');
+            return null;
+        }
+
+        const index = this.getCueIndex(targetCueId);
+        const duplicatedCue = {
+            ...cue,
+            id: this.generateUUID(),
+            number: this.getNextCueNumber(),
+            name: `${cue.name} Copy`,
+            created: new Date().toISOString(),
+            status: 'ready' // Always start as ready
+        };
+
+        this.cues.splice(index + 1, 0, duplicatedCue);
+        
+        // Select the duplicated cue
+        this.selectCue(duplicatedCue.id);
+        
+        this.markUnsaved();
+        this.emit('cueAdded', { cue: duplicatedCue, index: index + 1 });
+        
+        console.log(`Duplicated cue: ${cue.name} → ${duplicatedCue.name}`);
+        return duplicatedCue;
+    }
+
+    // Enhanced save/load methods
+    async saveShowAs() {
+        const showData = {
+            name: this.showName,
+            version: '1.2',
+            created: new Date().toISOString(),
+            lastModified: new Date().toISOString(),
+            cues: this.cues,
+            settings: {
+                currentCueIndex: this.currentCueIndex,
+                masterVolume: this.masterVolume,
+                autoContinueEnabled: this.autoContinueEnabled,
+                singleCueMode: this.singleCueMode
+            },
+            metadata: {
+                totalCues: this.cues.length,
+                cueTypes: this.getCueStats().byType,
+                createdWith: 'CueForge 1.0'
+            }
+        };
+
+        try {
+            const result = await window.qlabAPI.saveShow(showData);
+            
+            if (result.success) {
+                this.showPath = result.filePath;
+                this.showName = window.electronAPI.path.basename(this.showPath, '.qlab');
+                this.unsavedChanges = false;
+                this.emit('showChanged', { showName: this.showName, saved: true, path: this.showPath });
+                console.log(`Show saved as: ${this.showPath}`);
+                return true;
+            }
+        } catch (error) {
+            console.error('Save As error:', error);
+            return false;
+        }
+
+        return false;
+    }
+
+    // Emergency stop all
+    emergencyStopAll() {
+        console.log('🚨 EMERGENCY STOP ALL 🚨');
+        
+        // Immediate stop of all playback
+        this.isPlaying = false;
+        this.isPaused = false;
+        
+        // Clear any pending auto-continue timeouts
+        this.clearAllAutoContinueTimeouts();
+        
+        // Clear executing cues set
+        this.executingCues.clear();
+        
+        // Stop all cues regardless of their current state
+        this.cues.forEach(cue => {
+            if (cue.status === 'playing' || cue.status === 'loading') {
+                cue.status = 'ready';
+                console.log(`Emergency stopped cue: ${cue.number} - ${cue.name}`);
+            }
+        });
+
+        // Emergency stop on all engines
+        if (window.audioEngine) {
+            window.audioEngine.stopAllCues();
+            window.audioEngine.setMasterVolume(0); // Immediate silence
+            setTimeout(() => {
+                window.audioEngine.setMasterVolume(this.masterVolume);
+            }, 100); // Restore volume after brief silence
+        }
+        
+        if (window.videoEngine) {
+            window.videoEngine.stopAllCues();
+        }
+        
+        if (window.displayManager) {
+            window.displayManager.clearAllDisplays();
+        }
+
+        console.log('🚨 EMERGENCY STOP COMPLETE 🚨');
+        this.emit('playbackStateChanged', { 
+            isPlaying: false, 
+            isPaused: false,
+            currentCueIndex: this.currentCueIndex,
+            emergencyStop: true
+        });
+    }
+
+    // Select all cues (for future multi-select functionality)
+    selectAllCues() {
+        // For now, just select the first cue
+        if (this.cues.length > 0) {
+            this.selectCue(this.cues[0].id);
+            console.log('Selected first cue (multi-select not yet implemented)');
+        }
+    }
+
+    // Generate UUID (in case the external function isn't available)
+    generateUUID() {
+        if (typeof uuidv4 === 'function') {
+            return uuidv4();
+        }
+        
+        // Fallback UUID generator
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
     }
 }
 

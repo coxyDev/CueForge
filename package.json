@@ -1,13 +1,14 @@
 {
-  "name": "qlab-clone",
+  "name": "cueforge",
   "version": "1.0.0",
-  "description": "Professional show control software - QLab clone for Windows",
+  "description": "Professional show control software - CueForge for Windows",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "cross-env NODE_ENV=development electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
+    "build:portable": "electron-builder --win portable",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
     "dist": "npm run build",
@@ -30,12 +31,12 @@
     "windows",
     "electron"
   ],
-  "author": "Your Name",
+  "author": "Joel Cox",
   "license": "MIT",
   "devDependencies": {
     "cross-env": "^7.0.3",
     "electron": "^27.0.0",
-    "electron-builder": "^24.6.4",
+    "electron-builder": "^24.13.3",
     "electron-rebuild": "^3.2.9",
     "rimraf": "^5.0.5"
   },
@@ -45,16 +46,18 @@
     "uuid": "^9.0.1"
   },
   "build": {
-    "appId": "com.yourcompany.qlab-clone",
-    "productName": "QLab Clone",
+    "appId": "com.joelcox.cueforge",
+    "productName": "CueForge",
     "directories": {
       "output": "dist",
       "buildResources": "build"
     },
     "files": [
       "main.js",
+      "preload.js",
       "src/**/*",
       "assets/**/*",
+      "node_modules/**/*",
       "package.json"
     ],
     "extraResources": [
@@ -79,7 +82,6 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico",
       "requestedExecutionLevel": "asInvoker",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
@@ -93,7 +95,6 @@
           ]
         }
       ],
-      "icon": "assets/icon.icns",
       "category": "public.app-category.music",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
@@ -112,7 +113,6 @@
           ]
         }
       ],
-      "icon": "assets/icon.png",
       "category": "AudioVideo",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
@@ -120,12 +120,9 @@
       "oneClick": false,
       "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico",
-      "installerHeaderIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "QLab Clone"
+      "shortcutName": "CueForge"
     }
   },
   "engines": {

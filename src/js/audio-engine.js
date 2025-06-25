@@ -416,35 +416,112 @@ class AudioEngine {
     }
 
     // Get supported audio formats
+       // Enhanced format support checking
     getSupportedAudioFormats() {
-        const audio = new Audio();
+        const audio = document.createElement('audio');
         const formats = [];
         
         const testFormats = [
-            { type: 'audio/mpeg', ext: 'mp3' },
-            { type: 'audio/wav', ext: 'wav' },
-            { type: 'audio/ogg', ext: 'ogg' },
-            { type: 'audio/aac', ext: 'aac' },
-            { type: 'audio/flac', ext: 'flac' },
-            { type: 'audio/mp4', ext: 'm4a' },
-            { type: 'audio/x-ms-wma', ext: 'wma' }
+            { type: 'audio/mpeg', ext: 'mp3', name: 'MP3' },
+            { type: 'audio/wav', ext: 'wav', name: 'WAV' },
+            { type: 'audio/ogg', ext: 'ogg', name: 'OGG Vorbis' },
+            { type: 'audio/aac', ext: 'aac', name: 'AAC' },
+            { type: 'audio/mp4', ext: 'm4a', name: 'M4A/AAC' },
+            { type: 'audio/x-m4a', ext: 'm4a', name: 'M4A (Apple)' },
+            { type: 'audio/flac', ext: 'flac', name: 'FLAC' },
+            { type: 'audio/webm', ext: 'webm', name: 'WebM Audio' },
+            { type: 'audio/opus', ext: 'opus', name: 'Opus' },
+            { type: 'audio/x-ms-wma', ext: 'wma', name: 'WMA' }
         ];
         
         testFormats.forEach(format => {
             const canPlay = audio.canPlayType(format.type);
             if (canPlay === 'probably' || canPlay === 'maybe') {
-                formats.push(format);
+                formats.push({
+                    ...format,
+                    support: canPlay
+                });
             }
         });
         
+        console.log('Supported audio formats:', formats);
         return formats;
     }
 
-    // Cleanup method
-    destroy() {
-        this.stopAllCues();
-        if (this.audioContext) {
-            this.audioContext.close();
+    // Enhanced audio file loading with better error handling
+    async getAudioFileInfo(filePath) {
+        try {
+            const audioUrl = this.getFileUrl(filePath);
+            console.log(`Getting audio info for: ${filePath}`);
+            console.log(`Audio URL: ${audioUrl}`);
+            
+            return new Promise((resolve, reject) => {
+                const audio = document.createElement('audio');
+                
+                audio.addEventListener('loadedmetadata', () => {
+                    const info = {
+                        duration: audio.duration * 1000, // Convert to milliseconds
+                        durationSeconds: audio.duration,
+                        sampleRate: audio.sampleRate || 44100, // Fallback
+                        channels: audio.mozChannels || 2, // Firefox property, fallback to stereo
+                        length: Math.floor(audio.duration * 44100), // Estimated samples
+                        canPlay: true,
+                        format: this.detectAudioFormat(filePath)
+                    };
+                    
+                    console.log(`Audio info loaded:`, info);
+                    resolve(info);
+                });
+                
+                audio.addEventListener('error', (e) => {
+                    const errorMsg = this.getAudioErrorMessage(audio.error);
+                    console.error(`Audio info loading failed: ${errorMsg}`, e);
+                    
+                    // Try to provide helpful error information
+                    const format = this.detectAudioFormat(filePath);
+                    const supportedFormats = this.getSupportedAudioFormats();
+                    const isSupported = supportedFormats.some(f => f.ext === format.toLowerCase());
+                    
+                    if (!isSupported) {
+                        reject(new Error(`Unsupported audio format: ${format}. Supported formats: ${supportedFormats.map(f => f.ext).join(', ')}`));
+                    } else {
+                        reject(new Error(`Audio loading failed: ${errorMsg}`));
+                    }
+                });
+                
+                audio.addEventListener('loadstart', () => {
+                    console.log(`Audio loading started: ${filePath}`);
+                });
+                
+                // Set source and load
+                audio.src = audioUrl;
+                audio.load();
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    reject(new Error('Audio loading timeout'));
+                }, 10000);
+            });
+        } catch (error) {
+            console.error('Failed to get audio file info:', error);
+            throw error;
+        }
+    }
+
+    detectAudioFormat(filePath) {
+        const ext = filePath.split('.').pop().toLowerCase();
+        return ext;
+    }
+
+    getAudioErrorMessage(error) {
+        if (!error) return 'Unknown audio error';
+        
+        switch (error.code) {
+            case 1: return 'MEDIA_ERR_ABORTED - Audio loading was aborted';
+            case 2: return 'MEDIA_ERR_NETWORK - Network error occurred';
+            case 3: return 'MEDIA_ERR_DECODE - Audio decoding error (codec issue)';
+            case 4: return 'MEDIA_ERR_SRC_NOT_SUPPORTED - Audio format not supported';
+            default: return `Unknown error code: ${error.code}`;
         }
     }
 }

@@ -549,23 +549,110 @@ class VideoEngine {
         const formats = [];
         
         const testFormats = [
-            { type: 'video/mp4', ext: 'mp4' },
-            { type: 'video/webm', ext: 'webm' },
-            { type: 'video/ogg', ext: 'ogv' },
-            { type: 'video/avi', ext: 'avi' },
-            { type: 'video/quicktime', ext: 'mov' },
-            { type: 'video/x-msvideo', ext: 'avi' },
-            { type: 'video/x-ms-wmv', ext: 'wmv' }
+            { type: 'video/mp4', ext: 'mp4', name: 'MP4 (H.264)' },
+            { type: 'video/mp4; codecs="avc1.42E01E"', ext: 'mp4', name: 'MP4 H.264 Baseline' },
+            { type: 'video/mp4; codecs="avc1.4D401E"', ext: 'mp4', name: 'MP4 H.264 Main' },
+            { type: 'video/mp4; codecs="avc1.64001E"', ext: 'mp4', name: 'MP4 H.264 High' },
+            { type: 'video/webm', ext: 'webm', name: 'WebM' },
+            { type: 'video/webm; codecs="vp8"', ext: 'webm', name: 'WebM VP8' },
+            { type: 'video/webm; codecs="vp9"', ext: 'webm', name: 'WebM VP9' },
+            { type: 'video/ogg', ext: 'ogv', name: 'OGG Theora' },
+            { type: 'video/quicktime', ext: 'mov', name: 'QuickTime MOV' },
+            { type: 'video/x-msvideo', ext: 'avi', name: 'AVI' },
+            { type: 'video/x-ms-wmv', ext: 'wmv', name: 'Windows Media' }
         ];
         
         testFormats.forEach(format => {
             const canPlay = video.canPlayType(format.type);
             if (canPlay === 'probably' || canPlay === 'maybe') {
-                formats.push(format);
+                formats.push({
+                    ...format,
+                    support: canPlay
+                });
             }
         });
         
+        console.log('Supported video formats:', formats);
         return formats;
+    }
+
+    // Enhanced video file info with codec detection
+    async getVideoFileInfo(filePath) {
+        try {
+            const videoUrl = this.getFileUrl(filePath);
+            console.log(`Getting video info for: ${filePath}`);
+            console.log(`Video URL: ${videoUrl}`);
+            
+            return new Promise((resolve, reject) => {
+                const video = document.createElement('video');
+                
+                video.addEventListener('loadedmetadata', () => {
+                    const info = {
+                        duration: video.duration * 1000, // Convert to milliseconds
+                        durationSeconds: video.duration,
+                        width: video.videoWidth,
+                        height: video.videoHeight,
+                        aspectRatio: video.videoWidth / video.videoHeight,
+                        canPlay: true,
+                        format: this.detectVideoFormat(filePath),
+                        hasAudio: video.mozHasAudio !== false, // Firefox property
+                        playbackRate: video.playbackRate
+                    };
+                    
+                    console.log(`Video info loaded:`, info);
+                    resolve(info);
+                });
+                
+                video.addEventListener('error', (e) => {
+                    const errorMsg = this.getVideoErrorMessage(video.error);
+                    console.error(`Video info loading failed: ${errorMsg}`, e);
+                    
+                    // Try to provide helpful error information
+                    const format = this.detectVideoFormat(filePath);
+                    const supportedFormats = this.getSupportedVideoFormats();
+                    const isSupported = supportedFormats.some(f => f.ext === format.toLowerCase());
+                    
+                    if (!isSupported) {
+                        reject(new Error(`Unsupported video format: ${format}. Supported formats: ${supportedFormats.map(f => f.ext).join(', ')}`));
+                    } else {
+                        reject(new Error(`Video loading failed: ${errorMsg}. Try converting to MP4 H.264 for best compatibility.`));
+                    }
+                });
+                
+                video.addEventListener('loadstart', () => {
+                    console.log(`Video loading started: ${filePath}`);
+                });
+                
+                // Set source and load
+                video.src = videoUrl;
+                video.load();
+                
+                // Timeout after 15 seconds for videos
+                setTimeout(() => {
+                    reject(new Error('Video loading timeout - file may be corrupted or too large'));
+                }, 15000);
+            });
+        } catch (error) {
+            console.error('Failed to get video file info:', error);
+            throw error;
+        }
+    }
+
+    detectVideoFormat(filePath) {
+        const ext = filePath.split('.').pop().toLowerCase();
+        return ext;
+    }
+
+    getVideoErrorMessage(error) {
+        if (!error) return 'Unknown video error';
+        
+        switch (error.code) {
+            case 1: return 'MEDIA_ERR_ABORTED - Video loading was aborted';
+            case 2: return 'MEDIA_ERR_NETWORK - Network error occurred';
+            case 3: return 'MEDIA_ERR_DECODE - Video decoding error (codec not supported)';
+            case 4: return 'MEDIA_ERR_SRC_NOT_SUPPORTED - Video format not supported';
+            default: return `Unknown error code: ${error.code}`;
+        }
     }
 
     // Preview video in inspector

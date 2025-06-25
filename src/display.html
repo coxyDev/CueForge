@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' file:; media-src 'self' file:; img-src 'self' file: data:;">
-    <title>QLab Clone - Display Output</title>
+    <title>CueForge - Display Output</title>
     <style>
         * {
             margin: 0;
@@ -125,18 +125,18 @@
 </head>
 <body>
     <div id="display-container">
-        <div class="standby-message">QLab Clone Output - Standby</div>
+        <div class="standby-message">CueForge Output - Standby</div>
     </div>
 
     <script>
-        const { ipcRenderer } = require('electron');
-        
+        // Display renderer with secure API handling
         class DisplayRenderer {
             constructor() {
                 this.container = document.getElementById('display-container');
                 this.currentContent = null;
                 this.currentMedia = null;
                 
+                console.log('Display renderer initializing...');
                 this.setupIPC();
                 console.log('Display renderer initialized');
                 
@@ -145,9 +145,53 @@
             }
 
             setupIPC() {
-                ipcRenderer.on('display-content', (event, content) => {
-                    this.handleContent(content);
-                });
+                // Check if we have access to the secure APIs
+                if (window.electronAPI && window.electronAPI.ipcRenderer) {
+                    console.log('Using secure IPC API');
+                    window.electronAPI.ipcRenderer.on('display-content', this.handleContent.bind(this));
+                } else {
+                    console.error('Secure IPC API not available in display window');
+                    this.showError('Display API Error: Secure communication not available');
+                }
+            }
+
+            // Convert file path to proper URL format (same as video engine)
+            getFileUrl(filePath) {
+                if (!filePath) return null;
+                
+                console.log(`Converting file path: ${filePath}`);
+                
+                // If it's already a proper URL, return it
+                if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('blob:')) {
+                    return filePath;
+                }
+                
+                // Handle file:// URLs
+                if (filePath.startsWith('file://')) {
+                    return filePath;
+                }
+                
+                // Convert Windows/Unix paths to file:// URLs
+                let normalizedPath = filePath.replace(/\\/g, '/');
+                
+                // For Windows drive letters (C:, D:, etc.)
+                if (normalizedPath.match(/^[A-Z]:/i)) {
+                    const fileUrl = `file:///${normalizedPath}`;
+                    console.log(`Converted Windows path to: ${fileUrl}`);
+                    return fileUrl;
+                }
+                
+                // For Unix-style absolute paths
+                if (normalizedPath.startsWith('/')) {
+                    const fileUrl = `file://${normalizedPath}`;
+                    console.log(`Converted Unix path to: ${fileUrl}`);
+                    return fileUrl;
+                }
+                
+                // For relative paths, assume they're relative to the app
+                const fileUrl = `file://${normalizedPath}`;
+                console.log(`Converted relative path to: ${fileUrl}`);
+                return fileUrl;
             }
 
             startClock() {
@@ -161,7 +205,7 @@
 
             async handleContent(content) {
                 try {
-                    console.log('Received display content:', content.type);
+                    console.log('Display received content:', content.type, content);
                     
                     switch (content.type) {
                         case 'video':
@@ -192,11 +236,12 @@
             }
 
             async showVideo(content) {
+                console.log('Displaying video:', content.filePath);
                 this.clearContent();
                 
                 const video = document.createElement('video');
                 video.className = 'media-content';
-                video.controls = false;
+                video.controls = false; // No controls on output display
                 video.autoplay = true;
                 video.loop = content.loop || false;
                 video.volume = content.volume || 1.0;
@@ -220,20 +265,24 @@
                     }, 100);
                 }
                 
-                // Set video source
-                video.src = content.filePath;
+                // Convert file path to proper URL
+                const videoUrl = this.getFileUrl(content.filePath);
+                console.log(`Setting video source to: ${videoUrl}`);
+                video.src = videoUrl;
                 
                 // Handle start time
                 if (content.startTime > 0) {
                     video.addEventListener('loadeddata', () => {
+                        console.log(`Setting start time to: ${content.startTime / 1000}s`);
                         video.currentTime = content.startTime / 1000;
-                    });
+                    }, { once: true });
                 }
                 
                 // Handle end time
                 if (content.endTime) {
                     video.addEventListener('timeupdate', () => {
                         if (video.currentTime >= (content.endTime / 1000)) {
+                            console.log('Video reached end time, stopping');
                             video.pause();
                             
                             // Handle fade out
@@ -252,22 +301,51 @@
                 // Error handling
                 video.addEventListener('error', (e) => {
                     console.error('Video playback error:', e);
-                    this.showError(`Video playback failed: ${video.error?.message || 'Unknown error'}`);
+                    console.error('Video error details:', video.error);
+                    const errorMessage = video.error ? 
+                        `Video Error (${video.error.code}): ${this.getVideoErrorMessage(video.error.code)}` :
+                        'Unknown video error';
+                    this.showError(errorMessage);
                 });
                 
                 // Success handling
                 video.addEventListener('loadeddata', () => {
                     console.log('Video loaded successfully');
+                    console.log(`Video dimensions: ${video.videoWidth}x${video.videoHeight}`);
+                    console.log(`Video duration: ${video.duration}s`);
+                });
+
+                video.addEventListener('canplay', () => {
+                    console.log('Video can start playing');
+                });
+
+                video.addEventListener('playing', () => {
+                    console.log('Video started playing');
+                });
+
+                video.addEventListener('loadstart', () => {
+                    console.log('Video loading started');
                 });
                 
                 this.container.appendChild(video);
                 this.currentMedia = video;
                 this.currentContent = content;
                 
-                console.log(`Video content displayed: ${content.filePath}`);
+                console.log(`Video content displayed on external display: ${content.filePath}`);
+            }
+
+            getVideoErrorMessage(errorCode) {
+                switch (errorCode) {
+                    case 1: return 'MEDIA_ERR_ABORTED - Video loading was aborted';
+                    case 2: return 'MEDIA_ERR_NETWORK - Network error occurred';
+                    case 3: return 'MEDIA_ERR_DECODE - Video decoding error';
+                    case 4: return 'MEDIA_ERR_SRC_NOT_SUPPORTED - Video format not supported';
+                    default: return `Unknown error code: ${errorCode}`;
+                }
             }
 
             async showImage(content) {
+                console.log('Displaying image:', content.filePath);
                 this.clearContent();
                 
                 const img = document.createElement('img');
@@ -303,23 +381,26 @@
                     console.log('Image loaded successfully');
                 });
                 
-                // Set image source
-                img.src = content.filePath;
+                // Convert file path to proper URL and set image source
+                const imageUrl = this.getFileUrl(content.filePath);
+                console.log(`Setting image source to: ${imageUrl}`);
+                img.src = imageUrl;
                 
                 this.container.appendChild(img);
                 this.currentMedia = img;
                 this.currentContent = content;
                 
-                console.log(`Image content displayed: ${content.filePath}`);
+                console.log(`Image content displayed on external display: ${content.filePath}`);
             }
 
             showTestPattern(content) {
+                console.log('Displaying test pattern');
                 this.clearContent();
                 
                 const testPattern = document.createElement('div');
                 testPattern.className = 'test-pattern';
                 testPattern.innerHTML = `
-                    <h1>QLab Clone Display</h1>
+                    <h1>CueForge Display</h1>
                     <div class="info">Display: ${content.displayName || 'Unknown'}</div>
                     <div class="info">Resolution: ${content.resolution || 'Unknown'}</div>
                     <div class="info">Test Pattern Active</div>
@@ -333,50 +414,83 @@
             }
 
             showStandby() {
+                console.log('Display in standby mode');
                 this.clearContent();
                 
                 const standby = document.createElement('div');
                 standby.className = 'standby-message';
-                standby.textContent = 'QLab Clone Output - Standby';
+                standby.textContent = 'CueForge Output - Standby';
                 
                 this.container.appendChild(standby);
                 this.currentContent = null;
-                
-                console.log('Display in standby mode');
             }
 
             showError(message) {
+                console.error('Display error:', message);
                 this.clearContent();
                 
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'error-message';
-                errorDiv.textContent = message;
+                errorDiv.innerHTML = `
+                    <h3>Display Error</h3>
+                    <p>${message}</p>
+                    <p style="font-size: 18px; margin-top: 20px;">Check console for details</p>
+                `;
                 
                 this.container.appendChild(errorDiv);
-                
-                console.error('Display error:', message);
             }
 
             stopContent(cueId) {
+                console.log(`Stopping content for cue: ${cueId}`);
                 if (this.currentContent && this.currentContent.cueId === cueId) {
                     if (this.currentMedia && this.currentMedia.pause) {
                         this.currentMedia.pause();
                     }
                     this.clearContent();
                     console.log(`Stopped content for cue: ${cueId}`);
+                } else {
+                    console.log(`No matching content found for cue: ${cueId}`);
                 }
             }
 
             clearContent() {
+                console.log('Clearing display content');
                 this.container.innerHTML = '';
                 this.currentContent = null;
                 this.currentMedia = null;
-                console.log('Display cleared');
             }
         }
 
-        // Initialize display renderer
-        const displayRenderer = new DisplayRenderer();
+        // Wait for DOM to be ready
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Display DOM loaded, initializing renderer...');
+            
+            // Small delay to ensure APIs are available
+            setTimeout(() => {
+                try {
+                    // Initialize display renderer
+                    const displayRenderer = new DisplayRenderer();
+                    
+                    // Make it globally available for debugging
+                    window.displayRenderer = displayRenderer;
+                    
+                    console.log('Display renderer ready');
+                    
+                } catch (error) {
+                    console.error('Failed to initialize display renderer:', error);
+                    
+                    // Show error on display
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'error-message';
+                    errorDiv.innerHTML = `
+                        <h3>Initialization Error</h3>
+                        <p>${error.message}</p>
+                        <p style="font-size: 18px; margin-top: 20px;">Check console for details</p>
+                    `;
+                    document.getElementById('display-container').appendChild(errorDiv);
+                }
+            }, 100);
+        });
         
         // Prevent context menu
         document.addEventListener('contextmenu', (e) => {
@@ -388,7 +502,9 @@
             switch (e.key) {
                 case 'Escape':
                     // Clear display on Escape
-                    displayRenderer.showStandby();
+                    if (window.displayRenderer) {
+                        window.displayRenderer.showStandby();
+                    }
                     break;
                 case 'F11':
                     // Toggle fullscreen (prevent default)
@@ -397,10 +513,12 @@
                 case 't':
                 case 'T':
                     // Show test pattern
-                    displayRenderer.showTestPattern({
-                        displayName: 'Keyboard Test',
-                        resolution: `${window.screen.width}x${window.screen.height}`
-                    });
+                    if (window.displayRenderer) {
+                        window.displayRenderer.showTestPattern({
+                            displayName: 'Keyboard Test',
+                            resolution: `${window.screen.width}x${window.screen.height}`
+                        });
+                    }
                     break;
             }
         });
@@ -412,6 +530,16 @@
         
         window.addEventListener('blur', () => {
             console.log('Display window blurred');
+        });
+
+        // Add some debugging
+        window.addEventListener('load', () => {
+            console.log('Display window fully loaded');
+            console.log('Available APIs:', {
+                electronAPI: typeof window.electronAPI,
+                fs: typeof window.fs,
+                qlabAPI: typeof window.qlabAPI
+            });
         });
     </script>
 </body>
