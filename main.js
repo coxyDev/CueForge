@@ -123,39 +123,47 @@ function createWindow() {
     }
 
     // Handle web contents crashes
+    mainWindow.on('close', (event) => {
+        console.log('Main window close requested');
+        // Don't prevent the close - let it happen immediately
+    });
+
+    mainWindow.on('closed', () => {
+        console.log('Main window closed, cleaning up...');
+        
+        // Force close all display windows immediately
+        if (displayWindows && displayWindows.size > 0) {
+            console.log(`Closing ${displayWindows.size} display windows...`);
+            for (const [windowId, displayWindow] of displayWindows) {
+                try {
+                    if (!displayWindow.isDestroyed()) {
+                        console.log(`Force closing display window: ${windowId}`);
+                        displayWindow.destroy(); // Use destroy() instead of close()
+                    }
+                } catch (error) {
+                    console.error(`Error closing display window ${windowId}:`, error);
+                }
+            }
+            displayWindows.clear();
+        }
+        
+        mainWindow = null;
+        
+        // Force quit the entire application
+        console.log('Forcing application quit...');
+        app.quit();
+    });
+
+    // Handle renderer crashes - force quit instead of trying to recover
     mainWindow.webContents.on('crashed', (event) => {
-        console.error('Renderer process crashed:', event);
-        dialog.showErrorBox('Renderer Crashed', 'The renderer process has crashed. Restarting...');
-        mainWindow.reload();
+        console.error('Renderer process crashed, quitting application');
+        app.quit();
     });
 
     // Handle unresponsive window
     mainWindow.on('unresponsive', () => {
-        console.warn('Window became unresponsive');
-        dialog.showMessageBox(mainWindow, {
-            type: 'warning',
-            title: 'Window Unresponsive',
-            message: 'The window has become unresponsive. Would you like to reload it?',
-            buttons: ['Reload', 'Wait']
-        }).then(result => {
-            if (result.response === 0) {
-                mainWindow.reload();
-            }
-        });
-    });
-
-    // Emitted when the window is closed
-    mainWindow.on('closed', () => {
-        console.log('Main window closing, cleaning up...');
-        
-        // Close all display windows when main window closes
-        for (const [windowId, displayWindow] of displayWindows) {
-            if (!displayWindow.isDestroyed()) {
-                displayWindow.close();
-            }
-        }
-        displayWindows.clear();
-        mainWindow = null;
+        console.warn('Main window became unresponsive');
+        // Don't show dialog, just log it
     });
 
     // Set up application menu
@@ -825,6 +833,70 @@ app.on('activate', () => {
     if (mainWindow === null) {
         createWindow();
     }
+});
+
+app.on('window-all-closed', () => {
+    console.log('All windows closed - forcing quit');
+    // Always quit immediately, even on macOS
+    app.quit();
+});
+
+app.on('before-quit', (event) => {
+    console.log('Application before-quit event');
+    // Force close any remaining windows
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.destroy();
+    }
+    
+    // Clean up display windows
+    if (displayWindows && displayWindows.size > 0) {
+        for (const [windowId, displayWindow] of displayWindows) {
+            try {
+                if (!displayWindow.isDestroyed()) {
+                    displayWindow.destroy();
+                }
+            } catch (error) {
+                console.error(`Error destroying display window:`, error);
+            }
+        }
+        displayWindows.clear();
+    }
+});
+
+app.on('will-quit', (event) => {
+    console.log('Application will-quit event');
+    // Don't prevent quit
+});
+
+// Emergency force quit handler
+app.on('quit', () => {
+    console.log('Application quit event - forcing process exit');
+    // Give it 1 second to clean up, then force exit
+    setTimeout(() => {
+        process.exit(0);
+    }, 1000);
+});
+
+// Handle process termination signals
+process.on('SIGTERM', () => {
+    console.log('Received SIGTERM, quitting gracefully');
+    app.quit();
+});
+
+process.on('SIGINT', () => {
+    console.log('Received SIGINT, quitting gracefully');
+    app.quit();
+});
+
+// Handle uncaught exceptions - quit instead of hanging
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    app.quit();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // Don't quit on unhandled rejection, just log it
 });
 
 // Windows-specific optimizations
