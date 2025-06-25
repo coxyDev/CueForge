@@ -7,7 +7,8 @@ class CueForgeApp {
         this.uiManager = null;
         this.displayManager = null;
         this.initialized = false;
-        
+        this.appSettings = null;
+
         this.init();
     }
 
@@ -31,8 +32,8 @@ class CueForgeApp {
             this.setupErrorHandling();
             this.setupCleanup();
             
-            // Initialize with sample data
-            this.initSampleData();
+            // Apply startup preferences instead of always loading sample data
+            await this.applyStartupPreferences();
             
             // Add basic playback functionality
             this.setupBasicPlayback();
@@ -44,6 +45,204 @@ class CueForgeApp {
             console.error('Failed to initialize CueForge:', error);
             this.showError('Failed to initialize application', error.message);
         }
+    }
+
+     // New method to load app settings
+    async loadAppSettings() {
+        try {
+            if (this.apiAvailable && window.qlabAPI) {
+                this.appSettings = await window.qlabAPI.loadAppSettings();
+                console.log('App settings loaded:', this.appSettings);
+            } else {
+                console.warn('API not available for loading settings, using defaults');
+                this.appSettings = this.getDefaultSettings();
+            }
+        } catch (error) {
+            console.error('Failed to load app settings:', error);
+            this.appSettings = this.getDefaultSettings();
+        }
+    }
+
+    // Default settings fallback
+    getDefaultSettings() {
+        return {
+            startupMode: 'template',
+            startupFilePath: null,
+            preferences: {
+                singleCueMode: true,
+                autoContinueEnabled: true,
+                masterVolume: 1.0
+            }
+        };
+    }
+
+    // Check if APIs are available
+    get apiAvailable() {
+        return typeof window.qlabAPI !== 'undefined' && 
+               typeof window.electronAPI !== 'undefined' && 
+               typeof window.fs !== 'undefined';
+    }
+
+    // Apply startup preferences instead of always loading sample data
+    async applyStartupPreferences() {
+        try {
+            console.log('Applying startup preferences...');
+            
+            if (!this.appSettings) {
+                console.warn('No app settings available, loading template');
+                this.initSampleData();
+                return;
+            }
+
+            switch (this.appSettings.startupMode) {
+                case 'template':
+                    console.log('Loading sample template cues');
+                    this.initSampleData();
+                    break;
+                    
+                case 'file':
+                    if (this.appSettings.startupFilePath) {
+                        console.log('Loading startup file:', this.appSettings.startupFilePath);
+                        const success = await this.loadStartupFile(this.appSettings.startupFilePath);
+                        if (!success) {
+                            console.warn('Failed to load startup file, falling back to template');
+                            this.initSampleData();
+                        }
+                    } else {
+                        console.warn('No startup file specified, falling back to template');
+                        this.initSampleData();
+                    }
+                    break;
+                    
+                case 'empty':
+                    console.log('Starting with empty cue list');
+                    // Do nothing - cue manager starts empty
+                    this.cueManager.newShow();
+                    break;
+                    
+                default:
+                    console.warn('Unknown startup mode, loading template');
+                    this.initSampleData();
+                    break;
+            }
+
+            // Apply other preferences
+            if (this.appSettings.preferences) {
+                this.applyUserPreferences();
+            }
+            
+        } catch (error) {
+            console.error('Error applying startup preferences:', error);
+            // Fallback to template
+            this.initSampleData();
+        }
+    }
+
+    // Load startup file
+    async loadStartupFile(filePath) {
+        try {
+            if (!this.apiAvailable) {
+                console.error('Cannot load startup file: API not available');
+                return false;
+            }
+
+            console.log('Attempting to load startup file:', filePath);
+            const success = await this.cueManager.loadShow(filePath);
+            
+            if (success) {
+                console.log('Startup file loaded successfully');
+                return true;
+            } else {
+                console.error('Failed to load startup file');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error loading startup file:', error);
+            return false;
+        }
+    }
+
+    // Apply user preferences from settings
+    applyUserPreferences() {
+        try {
+            const prefs = this.appSettings.preferences;
+            
+            if (prefs.singleCueMode !== undefined) {
+                this.cueManager.setSingleCueMode(prefs.singleCueMode);
+            }
+            
+            if (prefs.autoContinueEnabled !== undefined) {
+                this.cueManager.setAutoContinueEnabled(prefs.autoContinueEnabled);
+            }
+            
+            if (prefs.masterVolume !== undefined) {
+                this.cueManager.setMasterVolume(prefs.masterVolume);
+            }
+            
+            console.log('User preferences applied');
+        } catch (error) {
+            console.error('Error applying user preferences:', error);
+        }
+    }
+
+    // Modified initSampleData method to be more explicit
+    initSampleData() {
+        try {
+            console.log('Initializing with sample template cues...');
+            
+            // Clear any existing cues
+            this.cueManager.newShow();
+            
+            // Add sample cues for demonstration
+            this.cueManager.addCue('wait', {
+                name: 'House to Half',
+                duration: 3000
+            });
+            
+            this.cueManager.addCue('audio', {
+                name: 'Welcome Music',
+                volume: 0.8,
+                fadeIn: 2000,
+                fadeOut: 1000
+            });
+            
+            this.cueManager.addCue('video', {
+                name: 'Opening Video',
+                volume: 0.9,
+                fadeIn: 1000,
+                fullscreen: false
+            });
+            
+            this.cueManager.addCue('wait', {
+                name: 'Speaker Introduction',
+                duration: 15000
+            });
+            
+            this.cueManager.addCue('group', {
+                name: 'Scene Change',
+                mode: 'sequential'
+            });
+            
+            // Mark as template (not unsaved changes)
+            this.cueManager.unsavedChanges = false;
+            this.cueManager.showName = 'Sample Template';
+            
+            console.log('✓ Sample template cues loaded');
+        } catch (error) {
+            console.warn('Failed to load sample cues:', error);
+        }
+    }
+
+    // New method to get current settings for saving
+    getCurrentAppSettings() {
+        return {
+            ...this.appSettings,
+            preferences: {
+                singleCueMode: this.cueManager.getSingleCueMode(),
+                autoContinueEnabled: this.cueManager.getAutoContinueEnabled(),
+                masterVolume: this.cueManager.getMasterVolume()
+            }
+        };
     }
 
     async initializeCoreComponents() {
@@ -460,20 +659,43 @@ class CueForgeApp {
         });
     }
 
-    setupCleanup() {
-        // Clean up on window close
-        window.addEventListener('beforeunload', (event) => {
-            if (this.cueManager && this.cueManager.unsavedChanges) {
-                event.preventDefault();
-                event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-                return event.returnValue;
+   setupCleanup() {
+    // Clean up on window close
+    window.addEventListener('beforeunload', async (event) => {
+        // Save current settings
+        try {
+            if (this.apiAvailable && this.cueManager) {
+                const currentSettings = this.getCurrentAppSettings();
+                // Use synchronous save approach for beforeunload
+                navigator.sendBeacon('/save-settings', JSON.stringify(currentSettings));
             }
-            
-            this.cleanup();
-        });
-    }
+        } catch (error) {
+            console.warn('Error saving settings on beforeunload:', error);
+        }
 
-    cleanup() {
+        // Check for unsaved changes
+        if (this.cueManager && this.cueManager.unsavedChanges) {
+            event.preventDefault();
+            event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+            return event.returnValue;
+        }
+        
+        this.cleanup();
+    });
+}
+
+   async  cleanup() {
+        try {
+            // Save current preferences before cleanup
+            if (this.apiAvailable && this.cueManager) {
+                const currentSettings = this.getCurrentAppSettings();
+                await window.qlabAPI.saveAppSettings(currentSettings);
+                console.log('Settings saved on cleanup');
+            }
+        } catch (error) {
+            console.warn('Error saving settings during cleanup:', error);
+        }
+
         try {
             if (this.audioEngine && this.audioEngine.destroy) {
                 this.audioEngine.destroy();

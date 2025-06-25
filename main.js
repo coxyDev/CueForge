@@ -122,10 +122,81 @@ function createWindow() {
         mainWindow.webContents.openDevTools();
     }
 
-    // Handle web contents crashes
-    mainWindow.on('close', (event) => {
+    // Handle window close with unsaved changes check
+    mainWindow.on('close', async (event) => {
         console.log('Main window close requested');
-        // Don't prevent the close - let it happen immediately
+        console.log('=== CLOSE EVENT DIAGNOSTIC ===');
+        console.log('1. Close event fired');
+        console.log('2. Event defaultPrevented:', event.defaultPrevented);
+        
+        // Prevent the window from closing immediately
+        event.preventDefault();
+        console.log('3. Close prevented - checking for unsaved changes');
+        
+        try {
+            // Check if renderer is available and responsive
+            if (mainWindow.webContents.isDestroyed()) {
+                console.log('4. WebContents destroyed - forcing close');
+                app.quit();
+                return;
+            }
+            
+            // Send message to renderer to check for unsaved changes
+            console.log('4. Sending close-check to renderer');
+            mainWindow.webContents.send('app-close-requested');
+            
+            // Set a timeout in case renderer doesn't respond
+            const timeout = setTimeout(() => {
+                console.log('5. Renderer response timeout - forcing close');
+                app.quit();
+            }, 5000); // 5 second timeout
+            
+            // Wait for renderer response
+            const closeConfirmed = await new Promise((resolve) => {
+                // Listen for renderer response
+                ipcMain.once('app-close-response', (event, canClose) => {
+                    clearTimeout(timeout);
+                    console.log('5. Renderer responded - canClose:', canClose);
+                    resolve(canClose);
+                });
+            });
+            
+            if (closeConfirmed) {
+                console.log('6. Close confirmed - destroying window');
+                // Actually close the window
+                mainWindow.destroy();
+            } else {
+                console.log('6. Close cancelled by user');
+            }
+            
+        } catch (error) {
+            console.error('4. Error checking renderer:', error);
+            console.log('5. Forcing close anyway');
+            
+            // Show a basic dialog if we can't communicate with renderer
+            const { response } = await dialog.showMessageBox(mainWindow, {
+                type: 'question',
+                buttons: ['Save & Exit', 'Exit Without Saving', 'Cancel'],
+                defaultId: 0,
+                cancelId: 2,
+                title: 'Confirm Exit',
+                message: 'Do you want to save your changes before exiting?',
+                detail: 'Unable to check for unsaved changes automatically.'
+            });
+            
+            if (response === 0) {
+                // Save & Exit - attempt to save then close
+                console.log('6. User chose Save & Exit');
+                app.quit();
+            } else if (response === 1) {
+                // Exit Without Saving
+                console.log('6. User chose Exit Without Saving');
+                app.quit();
+            }
+            // If Cancel (response === 2), do nothing - window stays open
+        }
+        
+        console.log('=== END DIAGNOSTIC ===');
     });
 
     mainWindow.on('closed', () => {
@@ -172,8 +243,7 @@ function createWindow() {
     console.log('✓ Main window setup complete');
 }
 
-// REPLACE the createMenu function in your main.js with this enhanced version
-
+// Application menu
 function createMenu() {
     const template = [
         {
@@ -554,6 +624,51 @@ ipcMain.handle('fs-stat', async (event, filePath) => {
     }
 });
 
+// Handle close confirmation from renderer
+ipcMain.handle('confirm-app-close', async (event, hasUnsavedChanges) => {
+    console.log('Renderer requests close confirmation, unsaved changes:', hasUnsavedChanges);
+    
+    if (!hasUnsavedChanges) {
+        // No unsaved changes, safe to close
+        return true;
+    }
+    
+    // Show save dialog
+    const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['Save & Exit', 'Exit Without Saving', 'Cancel'],
+        defaultId: 0,
+        cancelId: 2,
+        title: 'Unsaved Changes',
+        message: 'You have unsaved changes in your show.',
+        detail: 'Do you want to save your changes before exiting?'
+    });
+    
+    switch (response) {
+        case 0: // Save & Exit
+            console.log('User chose: Save & Exit');
+            // Try to save the show first
+            try {
+                // Send save command to renderer
+                mainWindow.webContents.send('app-save-before-close');
+                // Return true to allow close (renderer will handle saving)
+                return true;
+            } catch (error) {
+                console.error('Failed to save before close:', error);
+                return true; // Close anyway if save fails
+            }
+            
+        case 1: // Exit Without Saving
+            console.log('User chose: Exit Without Saving');
+            return true;
+            
+        case 2: // Cancel
+        default:
+            console.log('User chose: Cancel');
+            return false;
+    }
+});
+
 // IPC handlers for show operations
 ipcMain.handle('save-show-dialog', async (event, showData) => {
     try {
@@ -591,8 +706,7 @@ ipcMain.handle('load-show-file', async (event, filePath) => {
     }
 });
 
-// REPLACE the file dialog handlers in your main.js with these enhanced versions
-
+// File dialog handlers
 ipcMain.handle('select-audio-file', async () => {
     try {
         console.log('IPC: Select audio file dialog requested');
@@ -795,6 +909,116 @@ ipcMain.handle('send-to-display', async (event, data) => {
     }
 });
 
+// Settings management
+ipcMain.handle('load-app-settings', async () => {
+    try {
+        const settingsPath = path.join(__dirname, 'settings.json');
+        console.log(`Loading app settings from: ${settingsPath}`);
+        
+        // Check if settings file exists
+        const exists = await fs.pathExists(settingsPath);
+        if (!exists) {
+            console.log('Settings file does not exist, using defaults');
+            return getDefaultSettings();
+        }
+        
+        // Read and parse settings
+        const settingsData = await fs.readJson(settingsPath);
+        console.log('App settings loaded successfully');
+        
+        // Merge with defaults to ensure all required properties exist
+        const defaultSettings = getDefaultSettings();
+        return { ...defaultSettings, ...settingsData };
+        
+    } catch (error) {
+        console.error('Failed to load app settings:', error);
+        return getDefaultSettings();
+    }
+});
+
+ipcMain.handle('save-app-settings', async (event, settings) => {
+    try {
+        const settingsPath = path.join(__dirname, 'settings.json');
+        console.log(`Saving app settings to: ${settingsPath}`);
+        
+        // Add metadata
+        const settingsToSave = {
+            ...settings,
+            lastModified: new Date().toISOString(),
+            version: '1.0'
+        };
+        
+        await fs.writeJson(settingsPath, settingsToSave, { spaces: 2 });
+        console.log('App settings saved successfully');
+        return { success: true };
+        
+    } catch (error) {
+        console.error('Failed to save app settings:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('select-startup-file', async () => {
+    try {
+        console.log('IPC: Select startup file dialog requested');
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openFile'],
+            filters: [
+                { name: 'CueForge Shows', extensions: ['crfg'] },
+                { name: 'QLab Shows (Legacy)', extensions: ['qlab'] },
+                { name: 'All Files', extensions: ['*'] }
+            ],
+            title: 'Select Default Startup File'
+        });
+        
+        if (!result.canceled) {
+            const filePath = result.filePaths[0];
+            console.log(`✓ Startup file selected: ${filePath}`);
+            
+            // Verify file exists and is readable
+            try {
+                const exists = await fs.pathExists(filePath);
+                if (!exists) {
+                    throw new Error('File does not exist');
+                }
+                
+                // Try to read the file to make sure it's valid
+                const showData = await fs.readJson(filePath);
+                
+                return { success: true, filePath: filePath };
+            } catch (accessError) {
+                console.error('Selected file is not readable or invalid:', accessError);
+                return { success: false, error: 'File is not readable or not a valid show file' };
+            }
+        }
+        
+        console.log('Startup file selection cancelled');
+        return { success: false, cancelled: true };
+    } catch (error) {
+        console.error('Select startup file error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Helper function for default settings
+function getDefaultSettings() {
+    return {
+        startupMode: 'template', // 'template', 'file', or 'empty'
+        startupFilePath: null,
+        windowSize: {
+            width: 1200,
+            height: 800
+        },
+        windowPosition: null, // Will center if null
+        lastOpenFiles: [],
+        preferences: {
+            singleCueMode: true,
+            autoContinueEnabled: true,
+            masterVolume: 1.0
+        }
+    };
+}
+
 // Error handling for unhandled promises
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
@@ -802,6 +1026,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
+    app.quit();
 });
 
 // App event handlers
@@ -819,12 +1044,9 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-    console.log('All windows closed');
-    // On Windows and Linux, quit when all windows are closed
-    // On macOS, keep the app running even when all windows are closed
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
+    console.log('All windows closed - forcing quit');
+    // Always quit immediately, even on macOS
+    app.quit();
 });
 
 app.on('activate', () => {
@@ -833,12 +1055,6 @@ app.on('activate', () => {
     if (mainWindow === null) {
         createWindow();
     }
-});
-
-app.on('window-all-closed', () => {
-    console.log('All windows closed - forcing quit');
-    // Always quit immediately, even on macOS
-    app.quit();
 });
 
 app.on('before-quit', (event) => {
@@ -886,17 +1102,6 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
     console.log('Received SIGINT, quitting gracefully');
     app.quit();
-});
-
-// Handle uncaught exceptions - quit instead of hanging
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
-    app.quit();
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // Don't quit on unhandled rejection, just log it
 });
 
 // Windows-specific optimizations

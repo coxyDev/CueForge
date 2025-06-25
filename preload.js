@@ -60,7 +60,7 @@ try {
             },
             send: function(channel, ...args) {
                 console.log('IPC send: ' + channel, args);
-                ipcRenderer.send(channel, ...args);
+                return ipcRenderer.send(channel, ...args);
             }
         },
         
@@ -132,6 +132,20 @@ try {
             console.log('Load show requested: ' + filePath);
             return ipcRenderer.invoke('load-show-file', filePath);
         },
+
+        // Settings management
+    loadAppSettings: function() {
+        console.log('Load app settings requested');
+        return ipcRenderer.invoke('load-app-settings');
+    },
+    saveAppSettings: function(settings) {
+        console.log('Save app settings requested');
+        return ipcRenderer.invoke('save-app-settings', settings);
+    },
+    selectStartupFile: function() {
+        console.log('Select startup file requested');
+        return ipcRenderer.invoke('select-startup-file');
+    },
         
         // File selection
         selectAudioFile: function() {

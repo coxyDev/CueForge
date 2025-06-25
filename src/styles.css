@@ -2201,4 +2201,215 @@ body {
     color: #999;
     transform: translateX(-50%);
 }
+
+/* Radio group styling */
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+    margin-bottom: 16px;
+}
+
+.radio-option {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    background: #1a1a1a;
+    border: 1px solid #404040;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.radio-option:hover {
+    background: #252525;
+    border-color: #555;
+}
+
+.radio-option input[type="radio"] {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: #0d7377;
+    cursor: pointer;
+}
+
+.radio-option input[type="radio"]:checked {
+    accent-color: #0d7377;
+}
+
+.radio-option.selected,
+.radio-option:has(input[type="radio"]:checked) {
+    background: rgba(13, 115, 119, 0.1);
+    border-color: #0d7377;
+}
+
+.radio-label {
+    font-weight: 500;
+    color: #fff;
+    font-size: 14px;
+    margin-bottom: 4px;
+    padding-right: 30px; /* Space for radio button */
+}
+
+.radio-option small {
+    color: #b0b0b0;
+    font-size: 12px;
+    line-height: 1.4;
+    padding-right: 30px; /* Space for radio button */
+}
+
+.radio-option:has(input[type="radio"]:checked) .radio-label {
+    color: #0d7377;
+}
+
+/* Startup file selection */
+.startup-file-selection {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid #333;
+    border-radius: 4px;
+    transition: opacity 0.3s ease;
+}
+
+.startup-file-selection.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.startup-file-selection label {
+    display: block;
+    font-size: 12px;
+    color: #b0b0b0;
+    margin-bottom: 6px;
+}
+
+.file-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.file-input-group input[type="text"] {
+    flex: 1;
+    background: #2d2d2d;
+    border: 1px solid #404040;
+    border-radius: 4px;
+    color: #ccc;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: monospace;
+}
+
+.file-input-group input[type="text"]:focus {
+    outline: none;
+    border-color: #0d7377;
+    box-shadow: 0 0 0 2px rgba(13, 115, 119, 0.2);
+}
+
+.file-input-group input[type="text"]::placeholder {
+    color: #666;
+    font-style: italic;
+}
+
+.file-input-group .btn-small {
+    flex: 0 0 auto;
+    min-width: 80px;
+    background: #0d7377;
+    border-color: #0a5d61;
+}
+
+.file-input-group .btn-small:hover:not(:disabled) {
+    background: #0a5d61;
+}
+
+.file-input-group .btn-small:disabled {
+    background: #2a2a2a;
+    border-color: #333;
+    color: #666;
+    cursor: not-allowed;
+}
+
+/* Settings section improvements */
+.settings-section {
+    margin-bottom: 30px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.settings-section h3 {
+    color: #fff;
+    font-size: 16px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #0d7377;
+    padding-bottom: 8px;
+    position: relative;
+}
+
+.settings-section h3::before {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 40px;
+    height: 2px;
+    background: #0d7377;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .radio-group {
+        gap: 8px;
+    }
+    
+    .radio-option {
+        padding: 10px;
+    }
+    
+    .radio-label {
+        font-size: 13px;
+    }
+    
+    .radio-option small {
+        font-size: 11px;
+    }
+    
+    .file-input-group {
+        flex-direction: column;
+        gap: 6px;
+    }
+    
+    .file-input-group .btn-small {
+        width: 100%;
+    }
+}
+
+/* Animation for radio selection */
+.radio-option {
+    transition: all 0.3s ease;
+}
+
+.radio-option:has(input[type="radio"]:checked) {
+    animation: selectGlow 0.5s ease-out;
+}
+
+@keyframes selectGlow {
+    0% {
+        box-shadow: 0 0 0 0 rgba(13, 115, 119, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(13, 115, 119, 0.2);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(13, 115, 119, 0);
+    }
+}
 }

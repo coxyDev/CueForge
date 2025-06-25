@@ -17,9 +17,11 @@ class UIManager {
         this.initializeElements();
         this.bindEvents();
         this.setupMenuHandlers();
+        this.setupCloseHandlers();
         this.setupGlobalKeyHandler();
         
         this.ensureSettingsModalHidden();
+        this.appSettings = null;
         this.updateUI();
         this.startTimeUpdater();
         this.setupMasterVolumeControl();
@@ -704,6 +706,10 @@ class UIManager {
 
     async loadDisplaySettings() {
         try {
+
+            // Load app settings
+            this.appSettings = await window.qlabAPI.loadAppSettings();
+
             const singleCueModeCheckbox = document.getElementById('single-cue-mode');
             const autoContinueCheckbox = document.getElementById('auto-continue-enabled');
             
@@ -713,6 +719,9 @@ class UIManager {
             if (autoContinueCheckbox) {
                 autoContinueCheckbox.checked = this.cueManager.getAutoContinueEnabled();
             }
+
+            // Setup startup preferences
+            await this.setupStartupPreferences();
             
             if (this.apiAvailable && window.displayManager) {
                 const displays = await window.qlabAPI.getDisplays();
@@ -770,6 +779,11 @@ class UIManager {
         const clearDisplaysBtn = document.getElementById('clear-displays-btn');
         const refreshDisplaysBtn = document.getElementById('refresh-displays');
         const applySettingsBtn = document.getElementById('apply-settings');
+        const templateRadio = document.getElementById('startup-mode-template');
+        const fileRadio = document.getElementById('startup-mode-file');
+        const emptyRadio = document.getElementById('startup-mode-empty');
+        const selectStartupFileBtn = document.getElementById('select-startup-file');
+
         
         // Remove existing event listeners by cloning elements
         if (singleCueModeCheckbox) {
@@ -787,6 +801,52 @@ class UIManager {
                 this.cueManager.setAutoContinueEnabled(e.target.checked);
             });
         }
+
+        if (templateRadio) {
+        templateRadio.addEventListener('change', () => {
+            if (templateRadio.checked) {
+                this.updateStartupFileControls();
+            }
+        });
+    }
+
+    if (fileRadio) {
+        fileRadio.addEventListener('change', () => {
+            if (fileRadio.checked) {
+                this.updateStartupFileControls();
+            }
+        });
+    }
+
+    if (emptyRadio) {
+        emptyRadio.addEventListener('change', () => {
+            if (emptyRadio.checked) {
+                this.updateStartupFileControls();
+            }
+        });
+    }
+
+    if (selectStartupFileBtn && this.apiAvailable) {
+        selectStartupFileBtn.addEventListener('click', async () => {
+            try {
+                const result = await window.qlabAPI.selectStartupFile();
+                
+                if (result.success) {
+                    const startupFileInput = document.getElementById('startup-file-path');
+                    if (startupFileInput) {
+                        startupFileInput.value = result.filePath;
+                    }
+                    
+                    this.showStatusMessage('Startup file selected', 'success');
+                } else if (!result.cancelled) {
+                    this.showStatusMessage('Failed to select startup file: ' + (result.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error selecting startup file:', error);
+                this.showStatusMessage('Error selecting startup file: ' + error.message, 'error');
+            }
+        });
+    }
 
         // Video routing
         if (videoRoutingSelect && window.displayManager && this.apiAvailable) {
@@ -827,11 +887,15 @@ class UIManager {
 
         // Apply settings button
         if (applySettingsBtn) {
-            applySettingsBtn.addEventListener('click', () => {
-                this.closeSettings();
-            });
-        }
+        applySettingsBtn.addEventListener('click', async () => {
+            await this.saveStartupPreferences();
+            this.closeSettings();
+        });
     }
+
+    // Initial update of startup file controls
+    this.updateStartupFileControls();
+}
 
     renderInspector() {
         const selectedCue = this.cueManager.getSelectedCue();
@@ -1618,31 +1682,256 @@ class UIManager {
         console.log('Audio engine enhanced with fade support');
     }
 
-    // Cleanup method
-    cleanup() {
-        if (this.timelineUpdateInterval) {
-            clearInterval(this.timelineUpdateInterval);
-            this.timelineUpdateInterval = null;
+    setupCloseHandlers() {
+    // Handle app close request from main process
+    if (this.apiAvailable && window.electronAPI && window.electronAPI.ipcRenderer) {
+        // Listen for close request
+        const closeRequestUnsubscriber = window.electronAPI.ipcRenderer.on('app-close-requested', async () => {
+            console.log('Received close request from main process');
+            await this.handleAppCloseRequest();
+        });
+        
+        // Listen for save before close request
+        const saveBeforeCloseUnsubscriber = window.electronAPI.ipcRenderer.on('app-save-before-close', async () => {
+            console.log('Received save before close request');
+            await this.handleSaveBeforeClose();
+        });
+        
+        // Store unsubscribers for cleanup
+        this.closeHandlerUnsubscribers = [closeRequestUnsubscriber, saveBeforeCloseUnsubscriber];
+        
+        console.log('Close handlers setup successfully');
+    } else {
+        console.warn('Close handlers not set up - API not available');
+    }
+}
+
+// Handle app close request
+async handleAppCloseRequest() {
+    try {
+        console.log('Checking for unsaved changes...');
+
+         // Save current app settings before closing
+        if (window.app && window.app.getCurrentAppSettings) {
+            try {
+                const currentSettings = window.app.getCurrentAppSettings();
+                await window.qlabAPI.saveAppSettings(currentSettings);
+                console.log('App settings saved before close');
+            } catch (settingsError) {
+                console.warn('Failed to save settings before close:', settingsError);
+            }
         }
         
-        if (this.videoTimelineUpdateInterval) {
-            clearInterval(this.videoTimelineUpdateInterval);
-            this.videoTimelineUpdateInterval = null;
-        }
-
-        // Cleanup menu event listener
-        if (this.menuUnsubscriber) {
-            this.menuUnsubscriber();
-        }
-
-        // Cleanup waveform renderer
-        if (this.waveformRenderer) {
-            this.waveformRenderer.destroy();
-            this.waveformRenderer = null;
+        // Check if there are unsaved changes
+        const hasUnsavedChanges = this.cueManager && this.cueManager.unsavedChanges;
+        console.log('Unsaved changes detected:', hasUnsavedChanges);
+        
+        // Ask main process to show confirmation dialog if needed
+        const canClose = await window.electronAPI.ipcRenderer.invoke('confirm-app-close', hasUnsavedChanges);
+        
+        console.log('Close confirmation result:', canClose);
+        
+        // Send response back to main process
+        window.electronAPI.ipcRenderer.send('app-close-response', canClose);
+        
+    } catch (error) {
+        console.error('Error handling close request:', error);
+        // If there's an error, allow close to prevent hanging
+        if (window.electronAPI && window.electronAPI.ipcRenderer) {
+            window.electronAPI.ipcRenderer.send('app-close-response', true);
         }
     }
+}
 
-    // ADD these methods to your UIManager class and UPDATE setupMenuHandlers
+// Handle save before close
+async handleSaveBeforeClose() {
+    try {
+        console.log('Attempting to save before close...');
+        
+        if (!this.cueManager) {
+            console.warn('No cue manager available for saving');
+            window.electronAPI.ipcRenderer.send('app-close-response', true);
+            return;
+        }
+        
+        // Try to save the show
+        let saveResult = false;
+        
+        if (this.cueManager.showPath) {
+            // Show has a path, save directly
+            saveResult = await this.cueManager.saveShow();
+        } else {
+            // No path, try to save as
+            saveResult = await this.cueManager.saveShowAs();
+        }
+        
+        if (saveResult) {
+            console.log('Show saved successfully before close');
+            this.showStatusMessage('Show saved successfully', 'success');
+        } else {
+            console.warn('Failed to save show before close - user may have cancelled');
+        }
+        
+        // Allow close regardless of save result
+        window.electronAPI.ipcRenderer.send('app-close-response', true);
+        
+    } catch (error) {
+        console.error('Error saving before close:', error);
+        if (this.showStatusMessage) {
+            this.showStatusMessage('Error saving show: ' + error.message, 'error');
+        }
+        
+        // Allow close even if save fails
+        if (window.electronAPI && window.electronAPI.ipcRenderer) {
+            window.electronAPI.ipcRenderer.send('app-close-response', true);
+        }
+    }
+}
+
+// New method to setup startup preferences UI
+async setupStartupPreferences() {
+    const startupSection = document.querySelector('.settings-section:has(#startup-mode-template)');
+    if (!startupSection && this.appSettings) {
+        // Create startup preferences section if it doesn't exist
+        console.log('Creating startup preferences section');
+    }
+    
+    // Set current values
+    const templateRadio = document.getElementById('startup-mode-template');
+    const fileRadio = document.getElementById('startup-mode-file');
+    const emptyRadio = document.getElementById('startup-mode-empty');
+    const startupFileInput = document.getElementById('startup-file-path');
+    const startupFileButton = document.getElementById('select-startup-file');
+    
+    if (templateRadio && fileRadio && emptyRadio && this.appSettings) {
+        // Set radio button based on current setting
+        switch (this.appSettings.startupMode) {
+            case 'template':
+                templateRadio.checked = true;
+                break;
+            case 'file':
+                fileRadio.checked = true;
+                break;
+            case 'empty':
+                emptyRadio.checked = true;
+                break;
+        }
+        
+        // Set file path if available
+        if (startupFileInput && this.appSettings.startupFilePath) {
+            startupFileInput.value = this.appSettings.startupFilePath;
+        }
+        
+        // Enable/disable file selection based on radio selection
+        this.updateStartupFileControls();
+    }
+}
+
+// Update startup file controls based on selection
+updateStartupFileControls() {
+    const fileRadio = document.getElementById('startup-mode-file');
+    const startupFileInput = document.getElementById('startup-file-path');
+    const startupFileButton = document.getElementById('select-startup-file');
+    
+    if (fileRadio && startupFileInput && startupFileButton) {
+        const isFileMode = fileRadio.checked;
+        startupFileInput.disabled = !isFileMode;
+        startupFileButton.disabled = !isFileMode;
+        
+        if (isFileMode) {
+            startupFileInput.style.opacity = '1';
+            startupFileButton.style.opacity = '1';
+        } else {
+            startupFileInput.style.opacity = '0.5';
+            startupFileButton.style.opacity = '0.5';
+        }
+    }
+}
+
+// Save startup preferences
+async saveStartupPreferences() {
+    try {
+        const templateRadio = document.getElementById('startup-mode-template');
+        const fileRadio = document.getElementById('startup-mode-file');
+        const emptyRadio = document.getElementById('startup-mode-empty');
+        const startupFileInput = document.getElementById('startup-file-path');
+        
+        if (!templateRadio || !fileRadio || !emptyRadio) {
+            console.warn('Startup preference controls not found');
+            return;
+        }
+        
+        // Determine selected mode
+        let startupMode = 'template';
+        if (fileRadio.checked) {
+            startupMode = 'file';
+        } else if (emptyRadio.checked) {
+            startupMode = 'empty';
+        }
+        
+        // Get file path if in file mode
+        let startupFilePath = null;
+        if (startupMode === 'file' && startupFileInput) {
+            startupFilePath = startupFileInput.value.trim() || null;
+        }
+        
+        // Update app settings
+        this.appSettings = {
+            ...this.appSettings,
+            startupMode: startupMode,
+            startupFilePath: startupFilePath
+        };
+        
+        // Save to file
+        const result = await window.qlabAPI.saveAppSettings(this.appSettings);
+        
+        if (result.success) {
+            console.log('Startup preferences saved successfully');
+            this.showStatusMessage('Startup preferences saved', 'success');
+        } else {
+            console.error('Failed to save startup preferences:', result.error);
+            this.showStatusMessage('Failed to save preferences', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error saving startup preferences:', error);
+        this.showStatusMessage('Error saving preferences: ' + error.message, 'error');
+    }
+}
+
+    // Cleanup method
+    cleanup() {
+    if (this.timelineUpdateInterval) {
+        clearInterval(this.timelineUpdateInterval);
+        this.timelineUpdateInterval = null;
+    }
+    
+    if (this.videoTimelineUpdateInterval) {
+        clearInterval(this.videoTimelineUpdateInterval);
+        this.videoTimelineUpdateInterval = null;
+    }
+
+    // Cleanup menu event listener
+    if (this.menuUnsubscriber) {
+        this.menuUnsubscriber();
+    }
+    
+    // Cleanup close handlers
+    if (this.closeHandlerUnsubscribers) {
+        this.closeHandlerUnsubscribers.forEach(unsubscriber => {
+            if (typeof unsubscriber === 'function') {
+                unsubscriber();
+            }
+        });
+        this.closeHandlerUnsubscribers = null;
+    }
+
+    // Cleanup waveform renderer
+    if (this.waveformRenderer) {
+        this.waveformRenderer.destroy();
+        this.waveformRenderer = null;
+    }
+}
 
     setupMenuHandlers() {
         // Set up menu event handler using the new secure API

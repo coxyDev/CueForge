@@ -113,6 +113,37 @@
                 <button id="close-settings" class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
+    <div class="settings-section">
+        <h3>Startup Preferences</h3>
+        <div class="setting-item">
+            <label>When CueForge starts:</label>
+            <div class="radio-group">
+                <label class="radio-option">
+                    <input type="radio" name="startup-mode" id="startup-mode-template" value="template" checked>
+                    <span class="radio-label">Load sample template cues</span>
+                    <small>Start with example cues to help you get started</small>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="startup-mode" id="startup-mode-file" value="file">
+                    <span class="radio-label">Open specific show file</span>
+                    <small>Always open the same show file when starting</small>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="startup-mode" id="startup-mode-empty" value="empty">
+                    <span class="radio-label">Start with empty cue list</span>
+                    <small>Begin with a completely blank show</small>
+                </label>
+            </div>
+            <div class="startup-file-selection" id="startup-file-selection">
+                <label for="startup-file-path">Startup file:</label>
+                <div class="file-input-group">
+                    <input type="text" id="startup-file-path" readonly placeholder="No file selected">
+                    <button type="button" id="select-startup-file" class="btn-small">Browse...</button>
+                </div>
+            </div>
+        </div>
+    </div>
+            <div class="modal-body">
                 <div class="settings-section">
                     <h3>Playback Settings</h3>
                     <div class="setting-item">
