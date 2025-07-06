@@ -163,11 +163,12 @@ class UIManager {
 
     setupGlobalKeyHandler() {
         document.addEventListener('keydown', (e) => {
+            // 🔧 FIX: Enhanced ESC handling for emergency stop
             if (e.key === 'Escape' || e.code === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('ESC pressed - emergency stop');
-                this.cueManager.stop();
+                console.log('ESC pressed - emergency stop all');
+                this.emergencyStopAll();
                 return;
             }
             
@@ -188,8 +189,8 @@ class UIManager {
             return;
         }
 
-        // Handle Stop
-        if ((e.ctrlKey || e.metaKey) && e.code === 'Period') {
+        // Handle Stop (Ctrl+. or Ctrl+/)
+        if ((e.ctrlKey || e.metaKey) && (e.code === 'Period' || e.code === 'Slash')) {
             e.preventDefault();
             console.log('Ctrl+. pressed - STOP');
             this.cueManager.stop();
@@ -204,7 +205,7 @@ class UIManager {
             return;
         }
 
-        // NEW: Handle playhead movement (Shift + arrows)
+        // Playhead movement (Shift + arrows)
         if (e.shiftKey && e.code === 'ArrowUp') {
             e.preventDefault();
             this.movePlayheadUp();
@@ -217,7 +218,7 @@ class UIManager {
             return;
         }
 
-        // NEW: Handle selection movement (arrows without shift)
+        // Selection movement (arrows without shift)
         if (!e.shiftKey && e.code === 'ArrowUp') {
             e.preventDefault();
             this.selectPreviousCue();
@@ -230,14 +231,14 @@ class UIManager {
             return;
         }
 
-        // NEW: Handle Enter to go to selected cue
+        // Enter to go to selected cue
         if (e.code === 'Enter' || e.code === 'NumpadEnter') {
             e.preventDefault();
             this.goToSelectedCue();
             return;
         }
 
-        // NEW: Handle Ctrl+Number to go to cue by number
+        // Ctrl+Number to go to cue by number
         if ((e.ctrlKey || e.metaKey) && e.code.startsWith('Digit')) {
             e.preventDefault();
             const cueNumber = e.code.replace('Digit', '');
@@ -258,13 +259,13 @@ class UIManager {
             case 'KeyS':
                 if (e.ctrlKey || e.metaKey) {
                     e.preventDefault();
-                    this.cueManager.saveShow();
+                    this.saveShow();
                 }
                 break;
             case 'KeyN':
                 if (e.ctrlKey || e.metaKey) {
                     e.preventDefault();
-                    this.cueManager.newShow();
+                    this.newShow();
                 }
                 break;
             case 'KeyO':
@@ -272,14 +273,14 @@ class UIManager {
                     e.preventDefault();
                     // Trigger file open dialog
                     if (this.apiAvailable) {
-                        window.qlabAPI.selectAudioFile(); // This will be handled by main process
+                        window.qlabAPI.selectAudioFile();
                     }
                 }
                 break;
         }
     }
 
-    // NEW: Playhead navigation methods
+    // Playhead navigation methods
     movePlayheadUp() {
         const cues = this.cueManager.cues;
         if (cues.length === 0) return;
@@ -328,7 +329,7 @@ class UIManager {
         }
     }
 
-    // NEW: Enhanced playhead event handler
+    // Enhanced playhead event handler
     onPlayheadChanged(data) {
         this.renderCueList(); // Re-render to update playhead indicator
         this.updateGoButtonText();
@@ -404,9 +405,27 @@ class UIManager {
             this.elements.deleteCue.addEventListener('click', () => this.deleteSelectedCue());
         }
 
-        // Settings
+        // Settings - open
         if (this.elements.settingsBtn) {
             this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
+        }
+        
+        // 🔧 FIX: Settings modal close button
+        if (this.elements.closeSettings) {
+            this.elements.closeSettings.addEventListener('click', () => {
+                console.log('Closing settings modal via close button');
+                this.closeSettings();
+            });
+        }
+        
+        // 🔧 FIX: Settings modal background click to close
+        if (this.elements.settingsModal) {
+            this.elements.settingsModal.addEventListener('click', (e) => {
+                if (e.target === this.elements.settingsModal) {
+                    console.log('Closing settings modal via background click');
+                    this.closeSettings();
+                }
+            });
         }
 
         // Cue manager events
@@ -546,7 +565,7 @@ class UIManager {
         });
     }
 
-    // ENHANCED: createCueElement with playhead indicator
+    // 🔧 FIX: Enhanced createCueElement with better selection and interaction
     createCueElement(cue, index) {
         const element = document.createElement('div');
         element.className = 'cue-item';
@@ -573,12 +592,12 @@ class UIManager {
             element.classList.add('auto-continue');
         }
 
-        // Check if cue is selected
+        // 🔧 FIX: Enhanced selection highlighting
         if (this.cueManager.selectedCueId === cue.id) {
             element.classList.add('selected');
         }
         
-        // NEW: Add standing by class
+        // Standing by class
         if (this.cueManager.standByCueId === cue.id) {
             element.classList.add('standing-by');
         }
@@ -586,7 +605,6 @@ class UIManager {
         // Create the playhead indicator text
         const playheadIndicator = this.cueManager.standByCueId === cue.id ? '▶ ' : '';
         
-        // Use proper HTML structure that matches our CSS
         element.innerHTML = `
             <div class="cue-number">${playheadIndicator}${cue.number}${cue.autoContinue ? ' →' : ''}</div>
             <div class="cue-name">${cue.name}</div>
@@ -595,20 +613,34 @@ class UIManager {
             <div class="cue-status ${cue.status}">${cue.status}</div>
         `;
         
-        // Event handlers (keep existing logic)
+        // 🔧 FIX: Consistent event handlers with better selection
         element.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
             if (e.shiftKey) {
+                // Shift+click = set as standby
                 this.cueManager.setStandByCue(cue.id);
+                console.log(`Set cue ${cue.number} as standby`);
+            } else if (e.ctrlKey || e.metaKey) {
+                // Ctrl+click = go to immediately
+                this.cueManager.goToCue(cue.id);
+                console.log(`Going to cue ${cue.number} immediately`);
             } else {
+                // Regular click = select
                 this.cueManager.selectCue(cue.id);
+                console.log(`Selected cue ${cue.number}`);
             }
         });
         
         element.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // Double-click = go to
             this.cueManager.goToCue(cue.id);
+            console.log(`Going to cue ${cue.number} via double-click`);
         });
         
-        // FIXED: Single context menu event listener
         element.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             // Future: context menu implementation
@@ -647,22 +679,26 @@ class UIManager {
         this.cueManager.selectCue(cues[newIndex].id);
     }
 
+    // 🔧 FIX: Correct transport button states
     updateTransportButtons() {
-        // Update button states based on playback status
         const isPlaying = this.cueManager.hasActiveCues();
         const isPaused = this.cueManager.isPaused;
         
+        // GO button - always enabled if there's a standby cue
         if (this.elements.goBtn) {
-            this.elements.goBtn.disabled = false;
+            const standByCue = this.cueManager.getStandByCue();
+            this.elements.goBtn.disabled = !standByCue;
         }
         
+        // 🔧 FIX: Stop and pause should be ENABLED when something is playing
         if (this.elements.stopBtn) {
             this.elements.stopBtn.disabled = !isPlaying && !isPaused;
         }
         
         if (this.elements.pauseBtn) {
             this.elements.pauseBtn.disabled = !isPlaying;
-            this.elements.pauseBtn.textContent = isPaused ? '▶' : '⏸';
+            this.elements.pauseBtn.innerHTML = isPaused ? '<span>▶</span>' : '<span>⏸</span>';
+            this.elements.pauseBtn.title = isPaused ? 'Resume (Ctrl+P)' : 'Pause (Ctrl+P)';
         }
     }
 
@@ -1392,9 +1428,33 @@ class UIManager {
         }
     }
 
+    // 🔧 FIX: Enhanced emergency stop functionality
     emergencyStopAll() {
+        console.log('🚨 EMERGENCY STOP - All playback stopped');
+        
+        // Stop all cues in cue manager
         this.cueManager.stop();
-        this.showStatusMessage('Emergency stop - all playback stopped', 'warning');
+        
+        // Stop audio engine
+        if (this.audioEngine && this.audioEngine.stopAllCues) {
+            this.audioEngine.stopAllCues();
+        }
+        
+        // Stop video engine  
+        if (window.videoEngine && window.videoEngine.stopAllCues) {
+            window.videoEngine.stopAllCues();
+        }
+        
+        // Clear displays
+        if (window.displayManager && window.displayManager.clearAllDisplays) {
+            window.displayManager.clearAllDisplays();
+        }
+        
+        // Show status message
+        this.showStatusMessage('🚨 EMERGENCY STOP - All playback stopped', 'warning');
+        
+        // Force UI update
+        this.updateUI();
     }
 
     // Settings

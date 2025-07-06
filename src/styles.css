@@ -107,7 +107,7 @@ body {
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
 }
@@ -122,60 +122,80 @@ body {
     transform: translateY(1px);
 }
 
+/* 🔧 FIX: Enhanced transport button disabled states */
 .transport-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    opacity: 0.3 !important;
+    cursor: not-allowed !important;
+    background: #404040 !important;
+    border-color: #555 !important;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
+.transport-btn:not(:disabled) {
+    opacity: 1;
+}
+
+/* 🔧 FIX: Enhanced GO button states */
 .go-btn {
     background: #28a745;
     border-color: #1e7e34;
     font-weight: 600;
     font-size: 16px;
     padding: 10px 20px;
+    transition: all 0.3s ease;
 }
 
 .go-btn:hover {
     background: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 
 .go-btn:not(.has-standby-cue) {
-    opacity: 0.7;
+    opacity: 0.5;
+    background: #6c757d;
+    border-color: #5a6268;
 }
 
 .go-btn.has-standby-cue {
     opacity: 1;
-    box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
-}
-
-.go-btn.has-standby-cue::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
     background: #28a745;
-    border-radius: 0 0 6px 6px;
+    border-color: #1e7e34;
+    box-shadow: 0 0 12px rgba(40, 167, 69, 0.4);
+    animation: go-button-ready 3s ease-in-out infinite;
 }
 
-.stop-btn {
+@keyframes go-button-ready {
+    0%, 100% { 
+        box-shadow: 0 0 12px rgba(40, 167, 69, 0.4);
+    }
+    50% { 
+        box-shadow: 0 0 16px rgba(40, 167, 69, 0.6);
+    }
+}
+
+/* 🔧 FIX: Enhanced stop button states */
+.stop-btn:not(:disabled) {
     background: #dc3545;
     border-color: #c82333;
 }
 
-.stop-btn:hover {
+.stop-btn:not(:disabled):hover {
     background: #c82333;
+    box-shadow: 0 0 8px rgba(220, 53, 69, 0.4);
 }
 
-.pause-btn {
+/* 🔧 FIX: Enhanced pause button states */
+.pause-btn:not(:disabled) {
     background: #ffc107;
     border-color: #e0a800;
     color: #000;
 }
 
-.pause-btn:hover {
+.pause-btn:not(:disabled):hover {
     background: #e0a800;
+    box-shadow: 0 0 8px rgba(255, 193, 7, 0.4);
 }
 
 .settings-btn {
@@ -307,14 +327,28 @@ body {
     position: relative;
 }
 
+/* 🔧 FIX: Enhanced hover states */
 .cue-item:hover {
     background-color: #252525;
+    transform: translateX(2px);
+    transition: all 0.2s ease;
 }
 
+/* 🔧 FIX: Enhanced blue selection highlight - much stronger */
 .cue-item.selected {
-    background-color: rgba(13, 115, 119, 0.3);
-    border: 1px solid #0d7377;
-    border-left: 3px solid #0d7377;
+    background-color: rgba(13, 115, 119, 0.6) !important; /* Increased from 0.3 to 0.6 */
+    border: 2px solid #0d7377 !important; /* Increased from 1px to 2px */
+    border-left: 4px solid #0d7377 !important; /* Increased from 3px to 4px */
+    box-shadow: 0 0 8px rgba(13, 115, 119, 0.4) !important; /* Added glow effect */
+    position: relative;
+    z-index: 2;
+}
+
+/* Enhanced hover state for selected items */
+.cue-item.selected:hover {
+    background-color: rgba(13, 115, 119, 0.7) !important;
+    box-shadow: 0 0 12px rgba(13, 115, 119, 0.6) !important;
+    transform: translateX(4px);
 }
 
 .cue-item.current {
@@ -340,29 +374,41 @@ body {
     border-right: 3px solid #17a2b8;
 }
 
-/* ==================== PLAYHEAD INDICATOR STYLES ==================== */
+/* ==================== ENHANCED PLAYHEAD INDICATOR STYLES ==================== */
 
+/* 🔧 FIX: Enhanced playhead indicator */
 .cue-item.standing-by {
-    border-left: 3px solid #28a745 !important;
-    background: linear-gradient(90deg, rgba(40, 167, 69, 0.15) 0%, transparent 60%) !important;
+    border-left: 4px solid #28a745 !important; /* Increased from 3px */
+    background: linear-gradient(90deg, 
+        rgba(40, 167, 69, 0.25) 0%, 
+        rgba(40, 167, 69, 0.1) 60%, 
+        transparent 100%) !important;
+    box-shadow: 0 0 6px rgba(40, 167, 69, 0.3) !important; /* Added glow */
 }
 
 .cue-item.standing-by .cue-number {
     color: #28a745 !important;
     font-weight: bold !important;
-    animation: playhead-pulse 3s ease-in-out infinite;
+    text-shadow: 0 0 4px rgba(40, 167, 69, 0.5) !important; /* Added glow to text */
+    animation: playhead-pulse 2s ease-in-out infinite;
 }
 
+/* 🔧 FIX: Better visual separation between states */
 .cue-item.selected.standing-by {
-    border-left: 3px solid #28a745 !important;
+    /* When both selected AND standing by */
+    border-left: 4px solid #28a745 !important; /* Green takes priority for playhead */
     background: linear-gradient(90deg, 
-        rgba(40, 167, 69, 0.15) 0%, 
-        rgba(13, 115, 119, 0.15) 60%, 
-        transparent 100%) !important;
+        rgba(40, 167, 69, 0.2) 0%, 
+        rgba(13, 115, 119, 0.6) 30%, 
+        rgba(13, 115, 119, 0.6) 100%) !important;
+    box-shadow: 0 0 8px rgba(13, 115, 119, 0.4), 0 0 4px rgba(40, 167, 69, 0.3) !important;
 }
 
 .cue-item.standing-by:hover {
-    background: linear-gradient(90deg, rgba(40, 167, 69, 0.25) 0%, rgba(255, 255, 255, 0.05) 60%) !important;
+    background: linear-gradient(90deg, 
+        rgba(40, 167, 69, 0.35) 0%, 
+        rgba(255, 255, 255, 0.05) 60%) !important;
+    transform: translateX(4px);
 }
 
 .cue-item.standing-by {
@@ -378,6 +424,33 @@ body {
 @keyframes executing-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.8; }
+}
+
+/* 🔧 FIX: Enhanced selection visibility in different states */
+.cue-item.playing.selected {
+    background: linear-gradient(90deg, 
+        rgba(40, 167, 69, 0.3) 0%, 
+        rgba(13, 115, 119, 0.6) 30%, 
+        rgba(13, 115, 119, 0.6) 100%) !important;
+    border-left: 4px solid #28a745 !important;
+    box-shadow: 0 0 8px rgba(13, 115, 119, 0.4), 0 0 4px rgba(40, 167, 69, 0.3) !important;
+}
+
+.cue-item.executing.selected {
+    background: linear-gradient(90deg, 
+        rgba(255, 193, 7, 0.3) 0%, 
+        rgba(13, 115, 119, 0.6) 30%, 
+        rgba(13, 115, 119, 0.6) 100%) !important;
+    animation: executing-pulse 1s ease-in-out infinite, selection-highlight 0.5s ease-in-out;
+}
+
+@keyframes selection-highlight {
+    0% { 
+        box-shadow: 0 0 8px rgba(13, 115, 119, 0.4);
+    }
+    100% { 
+        box-shadow: 0 0 16px rgba(13, 115, 119, 0.8);
+    }
 }
 
 /* Reduced motion support */
@@ -628,6 +701,7 @@ body {
     margin: 0;
 }
 
+/* 🔧 FIX: Enhanced modal close button */
 .modal-close {
     background: none;
     border: none;
@@ -641,11 +715,17 @@ body {
     align-items: center;
     justify-content: center;
     border-radius: 4px;
+    transition: all 0.2s ease;
 }
 
 .modal-close:hover {
     background: #404040;
     color: #ffffff;
+    transform: scale(1.1);
+}
+
+.modal-close:active {
+    transform: scale(0.95);
 }
 
 .modal-body {
@@ -804,6 +884,21 @@ input[type="checkbox"]:checked::after {
     color: white;
     font-size: 12px;
     font-weight: bold;
+}
+
+/* ==================== STATUS MESSAGES ==================== */
+
+/* 🔧 FIX: Emergency stop visual feedback */
+.status-message.status-warning {
+    background: #ffc107 !important;
+    color: #000 !important;
+    font-weight: bold;
+    animation: emergency-flash 0.5s ease-in-out 3;
+}
+
+@keyframes emergency-flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
 }
 
 /* ==================== SCROLLBARS ==================== */

@@ -1,9 +1,17 @@
 {
+  "startupMode": "template",
+  "startupFilePath": null,
+  "windowSize": {
+    "width": 1200,
+    "height": 800
+  },
+  "windowPosition": null,
+  "lastOpenFiles": [],
   "preferences": {
     "singleCueMode": true,
     "autoContinueEnabled": true,
     "masterVolume": 1
   },
-  "lastModified": "2025-06-25T11:13:28.693Z",
+  "lastModified": "2025-07-06T11:11:14.120Z",
   "version": "1.0"
 }
