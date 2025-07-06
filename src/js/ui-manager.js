@@ -97,6 +97,62 @@ class UIManager {
         }, 10000);
     }
 
+    ensureStylesLoaded() {
+        // Check if our main styles are loaded by testing for a specific CSS property
+        const testElement = document.createElement('div');
+        testElement.className = 'cue-item';
+        testElement.style.visibility = 'hidden';
+        testElement.style.position = 'absolute';
+        document.body.appendChild(testElement);
+        
+        const computedStyle = window.getComputedStyle(testElement);
+        const hasStyles = computedStyle.display === 'grid';
+        
+        document.body.removeChild(testElement);
+        
+        if (!hasStyles) {
+            console.error('CSS styles not loaded properly. Check styles.css file.');
+            this.showStylesError();
+        }
+    }
+
+    showStylesError() {
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        `;
+        
+        errorDiv.innerHTML = `
+            <h1 style="color: #dc3545; margin-bottom: 20px;">CueForge - Styles Loading Error</h1>
+            <p>The main stylesheet (styles.css) failed to load properly.</p>
+            <p style="margin-top: 10px;">Please check that the styles.css file exists and is accessible.</p>
+            <button onclick="location.reload()" style="
+                margin-top: 20px;
+                background: #28a745;
+                border: none;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+            ">Reload Page</button>
+        `;
+        
+        document.body.appendChild(errorDiv);
+    }
+
     ensureSettingsModalHidden() {
         const settingsModal = document.getElementById('settings-modal');
         if (settingsModal) {
@@ -279,17 +335,17 @@ class UIManager {
     }
 
     updateGoButtonText() {
-    if (!this.elements.goBtn) return;
-    
-    const standByCue = this.cueManager.getStandByCue();
-    if (standByCue) {
-        this.elements.goBtn.title = `Go - Execute Cue ${standByCue.number}: ${standByCue.name}`;
-        this.elements.goBtn.classList.add('has-standby-cue');
-    } else {
-        this.elements.goBtn.title = 'Go';
-        this.elements.goBtn.classList.remove('has-standby-cue');
+        if (!this.elements.goBtn) return;
+        
+        const standByCue = this.cueManager.getStandByCue();
+        if (standByCue) {
+            this.elements.goBtn.title = `Go - Execute Cue ${standByCue.number}: ${standByCue.name}`;
+            this.elements.goBtn.classList.add('has-standby-cue');
+        } else {
+            this.elements.goBtn.title = 'Go';
+            this.elements.goBtn.classList.remove('has-standby-cue');
+        }
     }
-}
 
     // Helper to check if an input field is focused
     isInputFocused(target) {
@@ -317,64 +373,7 @@ class UIManager {
             currentTime: document.getElementById('current-time'),
             displayRouting: document.getElementById('display-routing')
         };
-
-   ensureStylesLoaded() {
-    // Check if our main styles are loaded by testing for a specific CSS property
-    const testElement = document.createElement('div');
-    testElement.className = 'cue-item';
-    testElement.style.visibility = 'hidden';
-    testElement.style.position = 'absolute';
-    document.body.appendChild(testElement);
-    
-    const computedStyle = window.getComputedStyle(testElement);
-    const hasStyles = computedStyle.display === 'grid';
-    
-    document.body.removeChild(testElement);
-    
-    if (!hasStyles) {
-        console.error('CSS styles not loaded properly. Check styles.css file.');
-        this.showStylesError();
     }
-}
-
-// Add the showStylesError method if it doesn't exist
-showStylesError() {
-    const errorDiv = document.createElement('div');
-    errorDiv.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: #1a1a1a;
-        color: #e0e0e0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 99999;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    `;
-    
-    errorDiv.innerHTML = `
-        <h1 style="color: #dc3545; margin-bottom: 20px;">CueForge - Styles Loading Error</h1>
-        <p>The main stylesheet (styles.css) failed to load properly.</p>
-        <p style="margin-top: 10px;">Please check that the styles.css file exists and is accessible.</p>
-        <button onclick="location.reload()" style="
-            margin-top: 20px;
-            background: #28a745;
-            border: none;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        ">Reload Page</button>
-    `;
-    
-    document.body.appendChild(errorDiv);
-}
-}
 
     bindEvents() {
         // Transport controls
@@ -549,74 +548,74 @@ showStylesError() {
 
     // ENHANCED: createCueElement with playhead indicator
     createCueElement(cue, index) {
-    const element = document.createElement('div');
-    element.className = 'cue-item';
-    element.dataset.cueId = cue.id;
-    
-    // Apply state classes correctly
-    if (index === this.cueManager.currentCueIndex) {
-        element.classList.add('current');
-    }
-    
-    if (cue.status === 'playing') {
-        element.classList.add('playing');
-    }
-    
-    if (cue.status === 'loading') {
-        element.classList.add('loading');
-    }
-    
-    if (this.cueManager.isCueCurrentlyExecuting && this.cueManager.isCueCurrentlyExecuting(cue.id)) {
-        element.classList.add('executing');
-    }
-    
-    if (cue.autoContinue) {
-        element.classList.add('auto-continue');
-    }
-
-    // Check if cue is selected
-    if (this.cueManager.selectedCueId === cue.id) {
-        element.classList.add('selected');
-    }
-    
-    // NEW: Add standing by class
-    if (this.cueManager.standByCueId === cue.id) {
-        element.classList.add('standing-by');
-    }
-    
-    // Create the playhead indicator text
-    const playheadIndicator = this.cueManager.standByCueId === cue.id ? '▶ ' : '';
-    
-    // Use proper HTML structure that matches our CSS
-    element.innerHTML = `
-        <div class="cue-number">${playheadIndicator}${cue.number}${cue.autoContinue ? ' →' : ''}</div>
-        <div class="cue-name">${cue.name}</div>
-        <div class="cue-type">${cue.type}</div>
-        <div class="cue-duration">${this.formatDuration(cue.duration)}</div>
-        <div class="cue-status ${cue.status}">${cue.status}</div>
-    `;
-    
-    // Event handlers (keep existing logic)
-    element.addEventListener('click', (e) => {
-        if (e.shiftKey) {
-            this.cueManager.setStandByCue(cue.id);
-        } else {
-            this.cueManager.selectCue(cue.id);
+        const element = document.createElement('div');
+        element.className = 'cue-item';
+        element.dataset.cueId = cue.id;
+        
+        // Apply state classes correctly
+        if (index === this.cueManager.currentCueIndex) {
+            element.classList.add('current');
         }
-    });
-    
-    element.addEventListener('dblclick', (e) => {
-        this.cueManager.goToCue(cue.id);
-    });
-    
-    // FIXED: Single context menu event listener
-    element.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        // Future: context menu implementation
-    });
-    
-    return element;
-}
+        
+        if (cue.status === 'playing') {
+            element.classList.add('playing');
+        }
+        
+        if (cue.status === 'loading') {
+            element.classList.add('loading');
+        }
+        
+        if (this.cueManager.isCueCurrentlyExecuting && this.cueManager.isCueCurrentlyExecuting(cue.id)) {
+            element.classList.add('executing');
+        }
+        
+        if (cue.autoContinue) {
+            element.classList.add('auto-continue');
+        }
+
+        // Check if cue is selected
+        if (this.cueManager.selectedCueId === cue.id) {
+            element.classList.add('selected');
+        }
+        
+        // NEW: Add standing by class
+        if (this.cueManager.standByCueId === cue.id) {
+            element.classList.add('standing-by');
+        }
+        
+        // Create the playhead indicator text
+        const playheadIndicator = this.cueManager.standByCueId === cue.id ? '▶ ' : '';
+        
+        // Use proper HTML structure that matches our CSS
+        element.innerHTML = `
+            <div class="cue-number">${playheadIndicator}${cue.number}${cue.autoContinue ? ' →' : ''}</div>
+            <div class="cue-name">${cue.name}</div>
+            <div class="cue-type">${cue.type}</div>
+            <div class="cue-duration">${this.formatDuration(cue.duration)}</div>
+            <div class="cue-status ${cue.status}">${cue.status}</div>
+        `;
+        
+        // Event handlers (keep existing logic)
+        element.addEventListener('click', (e) => {
+            if (e.shiftKey) {
+                this.cueManager.setStandByCue(cue.id);
+            } else {
+                this.cueManager.selectCue(cue.id);
+            }
+        });
+        
+        element.addEventListener('dblclick', (e) => {
+            this.cueManager.goToCue(cue.id);
+        });
+        
+        // FIXED: Single context menu event listener
+        element.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            // Future: context menu implementation
+        });
+        
+        return element;
+    }
 
     selectNextCue() {
         const cues = this.cueManager.cues;
