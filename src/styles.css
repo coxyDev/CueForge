@@ -1,186 +1,67 @@
-/* ==================== PLAYHEAD INDICATOR FIXES ==================== */
+/* ==================== CORE APPLICATION STYLES ==================== */
 
-/* Cue that is "standing by" (ready for GO) */
-.cue-item.standing-by {
-    border-left: 3px solid #28a745 !important;
-    background: linear-gradient(90deg, rgba(40, 167, 69, 0.15) 0%, transparent 60%) !important;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-/* Make the playhead arrow green and slightly glowing */
-.cue-item.standing-by .cue-number {
-    color: #28a745 !important;
-    font-weight: bold !important;
+html, body {
+    height: 100%;
+    width: 100%;
 }
 
-/* If a cue is both selected AND standing by */
-.cue-item.selected.standing-by {
-    border-left: 3px solid #28a745 !important;
-    background: linear-gradient(90deg, 
-        rgba(40, 167, 69, 0.15) 0%, 
-        rgba(13, 115, 119, 0.15) 60%, 
-        transparent 100%) !important;
-}
-
-/* Enhanced GO button when standby cue is available */
-.go-btn.has-standby-cue::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: #28a745;
-    border-radius: 0 0 6px 6px;
-}
-
-/* Slight animation for playhead indicator */
-.cue-item.standing-by .cue-number {
-    animation: playhead-pulse 3s ease-in-out infinite;
-}
-
-@keyframes playhead-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
-/* Enhanced hover states for better UX */
-.cue-item:hover {
-    background-color: #252525 !important;
-}
-
-.cue-item.standing-by:hover {
-    background: linear-gradient(90deg, rgba(40, 167, 69, 0.25) 0%, rgba(255, 255, 255, 0.05) 60%) !important;
-}
-
-/* Better visual hierarchy */
-.cue-item.standing-by {
-    position: relative;
-    z-index: 1;
-}
-
-/* Ensure playhead indicator is visible */
-.cue-number::before {
-    content: attr(data-playhead);
-    color: #28a745;
-    font-weight: bold;
-    margin-right: 4px;
-}
-
-/* Reduced motion support */
-@media (prefers-reduced-motion: reduce) {
-    .cue-item.standing-by .cue-number {
-        animation: none;
-    }
-}
-
-/* ==================== GENERAL UI FIXES ==================== */
-
-/* Ensure proper cue item spacing and visibility */
-.cue-item {
-    padding: 8px 12px;
-    border-radius: 4px;
-    margin: 2px 0;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: grid;
-    grid-template-columns: 60px 1fr 80px 100px 80px;
-    align-items: center;
-    gap: 12px;
-    min-height: 40px;
-}
-
-/* Fix cue selection highlighting */
-.cue-item.selected {
-    background-color: rgba(13, 115, 119, 0.3) !important;
-    border: 1px solid #0d7377;
-}
-
-/* Improve cue type icons */
-.cue-number {
-    font-weight: 600;
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    background-color: #1a1a1a;
+    color: #e0e0e0;
     font-size: 14px;
-}
-
-/* Better status indicators */
-.cue-status.playing {
-    color: #28a745;
-    font-weight: bold;
-}
-
-.cue-status.paused {
-    color: #ffc107;
-    font-weight: bold;
-}
-
-.cue-status.loaded {
-    color: #6c757d;
-}
-
-/* Transport button improvements */
-.transport-controls {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.transport-btn {
-    position: relative;
+    line-height: 1.4;
     overflow: hidden;
+    margin: 0;
+    padding: 0;
 }
 
-/* GO button enhancement when cue is standing by */
-.go-btn:not(.has-standby-cue) {
-    opacity: 0.7;
+#app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
-.go-btn.has-standby-cue {
-    opacity: 1;
-    box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
-}
+/* ==================== HEADER STYLES ==================== */
 
-/* Cue list header improvements */
-.cue-list-header {
-    background: #2a2a2a;
-    padding: 8px 12px;
-    border-radius: 4px 4px 0 0;
-    font-weight: 600;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    display: grid;
-    grid-template-columns: 60px 1fr 80px 100px 80px;
-    gap: 12px;
-}
-
-/* Better scrolling for cue list */
-.cue-list {
-    max-height: calc(100vh - 300px);
-    overflow-y: auto;
-    border: 1px solid #444;
-    border-radius: 0 0 4px 4px;
-}
-
-/* Inspector panel improvements */
-.inspector-content {
-    padding: 16px;
-}
-
-.inspector-placeholder {
-    text-align: center;
-    color: #888;
-    font-style: italic;
-    padding: 40px 20px;
-}
-
-/* Status bar improvements */
-.status-bar {
-    background: #1a1a1a;
-    border-top: 1px solid #444;
-    padding: 8px 16px;
+.header {
+    background: #2d2d2d;
+    border-bottom: 1px solid #404040;
+    padding: 12px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12px;
+    min-height: 60px;
+}
+
+.header-section {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.header h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0;
+}
+
+.show-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#show-name {
+    font-size: 16px;
+    color: #b0b0b0;
 }
 
 .status-indicator {
@@ -188,7 +69,6 @@
     height: 8px;
     border-radius: 50%;
     display: inline-block;
-    margin-left: 8px;
 }
 
 .status-indicator.stopped {
@@ -208,4 +88,813 @@
     0% { opacity: 1; }
     50% { opacity: 0.5; }
     100% { opacity: 1; }
+}
+
+/* ==================== TRANSPORT CONTROLS ==================== */
+
+.transport-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.transport-btn {
+    background: #404040;
+    border: 1px solid #555;
+    color: #ffffff;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.transport-btn:hover {
+    background: #4a4a4a;
+    border-color: #666;
+}
+
+.transport-btn:active {
+    background: #333;
+    transform: translateY(1px);
+}
+
+.transport-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.go-btn {
+    background: #28a745;
+    border-color: #1e7e34;
+    font-weight: 600;
+    font-size: 16px;
+    padding: 10px 20px;
+}
+
+.go-btn:hover {
+    background: #218838;
+}
+
+.go-btn:not(.has-standby-cue) {
+    opacity: 0.7;
+}
+
+.go-btn.has-standby-cue {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
+}
+
+.go-btn.has-standby-cue::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #28a745;
+    border-radius: 0 0 6px 6px;
+}
+
+.stop-btn {
+    background: #dc3545;
+    border-color: #c82333;
+}
+
+.stop-btn:hover {
+    background: #c82333;
+}
+
+.pause-btn {
+    background: #ffc107;
+    border-color: #e0a800;
+    color: #000;
+}
+
+.pause-btn:hover {
+    background: #e0a800;
+}
+
+.settings-btn {
+    background: #6c757d;
+    border-color: #5a6268;
+}
+
+.settings-btn:hover {
+    background: #5a6268;
+}
+
+/* ==================== MAIN CONTENT ==================== */
+
+.main-content {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+
+/* ==================== CUE LIST SECTION ==================== */
+
+.cue-list-section {
+    width: 50%;
+    background: #222;
+    border-right: 1px solid #404040;
+    display: flex;
+    flex-direction: column;
+}
+
+.section-header {
+    background: #2a2a2a;
+    padding: 12px 16px;
+    border-bottom: 1px solid #404040;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.section-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0;
+}
+
+.cue-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-small {
+    background: #404040;
+    border: 1px solid #555;
+    color: #ffffff;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.btn-small:hover {
+    background: #4a4a4a;
+    border-color: #666;
+}
+
+.btn-small:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-danger {
+    background: #dc3545;
+    border-color: #c82333;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
+.btn-primary {
+    background: #007bff;
+    border-color: #0056b3;
+}
+
+.btn-primary:hover {
+    background: #0056b3;
+}
+
+/* ==================== CUE LIST ==================== */
+
+.cue-list-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.cue-list-header {
+    background: #2a2a2a;
+    padding: 8px 12px;
+    border-bottom: 1px solid #404040;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: grid;
+    grid-template-columns: 60px 1fr 80px 100px 80px;
+    gap: 12px;
+    color: #b0b0b0;
+}
+
+.cue-list {
+    flex: 1;
+    overflow-y: auto;
+    background: #1a1a1a;
+}
+
+.cue-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #2a2a2a;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: grid;
+    grid-template-columns: 60px 1fr 80px 100px 80px;
+    align-items: center;
+    gap: 12px;
+    min-height: 40px;
+    position: relative;
+}
+
+.cue-item:hover {
+    background-color: #252525;
+}
+
+.cue-item.selected {
+    background-color: rgba(13, 115, 119, 0.3);
+    border: 1px solid #0d7377;
+    border-left: 3px solid #0d7377;
+}
+
+.cue-item.current {
+    background-color: rgba(255, 193, 7, 0.2);
+    border-left: 3px solid #ffc107;
+}
+
+.cue-item.playing {
+    background-color: rgba(40, 167, 69, 0.2);
+    border-left: 3px solid #28a745;
+}
+
+.cue-item.loading {
+    background-color: rgba(255, 193, 7, 0.2);
+    border-left: 3px solid #ffc107;
+}
+
+.cue-item.executing {
+    animation: executing-pulse 1s ease-in-out infinite;
+}
+
+.cue-item.auto-continue {
+    border-right: 3px solid #17a2b8;
+}
+
+/* ==================== PLAYHEAD INDICATOR STYLES ==================== */
+
+.cue-item.standing-by {
+    border-left: 3px solid #28a745 !important;
+    background: linear-gradient(90deg, rgba(40, 167, 69, 0.15) 0%, transparent 60%) !important;
+}
+
+.cue-item.standing-by .cue-number {
+    color: #28a745 !important;
+    font-weight: bold !important;
+    animation: playhead-pulse 3s ease-in-out infinite;
+}
+
+.cue-item.selected.standing-by {
+    border-left: 3px solid #28a745 !important;
+    background: linear-gradient(90deg, 
+        rgba(40, 167, 69, 0.15) 0%, 
+        rgba(13, 115, 119, 0.15) 60%, 
+        transparent 100%) !important;
+}
+
+.cue-item.standing-by:hover {
+    background: linear-gradient(90deg, rgba(40, 167, 69, 0.25) 0%, rgba(255, 255, 255, 0.05) 60%) !important;
+}
+
+.cue-item.standing-by {
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes playhead-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes executing-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .cue-item.standing-by .cue-number,
+    .cue-item.executing {
+        animation: none;
+    }
+}
+
+/* ==================== CUE ITEM CONTENT ==================== */
+
+.cue-number {
+    font-weight: 600;
+    font-size: 14px;
+    color: #ffffff;
+}
+
+.cue-name {
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.cue-type {
+    color: #b0b0b0;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.cue-duration {
+    color: #b0b0b0;
+    font-size: 12px;
+    font-family: monospace;
+}
+
+.cue-status {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: lowercase;
+}
+
+.cue-status.loaded {
+    color: #6c757d;
+}
+
+.cue-status.playing {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.cue-status.paused {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.cue-status.loading {
+    color: #17a2b8;
+}
+
+/* ==================== INSPECTOR SECTION ==================== */
+
+.inspector-section {
+    width: 50%;
+    background: #222;
+    display: flex;
+    flex-direction: column;
+}
+
+.inspector-content {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+.inspector-placeholder {
+    text-align: center;
+    color: #888;
+    font-style: italic;
+    padding: 40px 20px;
+}
+
+.inspector-group {
+    margin-bottom: 24px;
+}
+
+.inspector-group h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.inspector-field {
+    margin-bottom: 12px;
+}
+
+.inspector-field label {
+    display: block;
+    font-size: 12px;
+    color: #b0b0b0;
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.inspector-field input,
+.inspector-field select,
+.inspector-field textarea {
+    width: 100%;
+    background: #333;
+    border: 1px solid #555;
+    color: #ffffff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.inspector-field input:focus,
+.inspector-field select:focus,
+.inspector-field textarea:focus {
+    outline: none;
+    border-color: #0d7377;
+    box-shadow: 0 0 0 2px rgba(13, 115, 119, 0.2);
+}
+
+.inspector-field input[readonly] {
+    background: #2a2a2a;
+    color: #888;
+}
+
+.inspector-field input[type="range"] {
+    padding: 0;
+}
+
+.inspector-field input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+}
+
+.inspector-field button {
+    background: #404040;
+    border: 1px solid #555;
+    color: #ffffff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+.inspector-field button:hover {
+    background: #4a4a4a;
+}
+
+.inspector-field button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ==================== VIDEO PREVIEW SECTION ==================== */
+
+.video-preview-section {
+    width: 50%;
+    background: #222;
+    border-right: 1px solid #404040;
+    display: flex;
+    flex-direction: column;
+}
+
+.video-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.video-preview-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a1a;
+    padding: 16px;
+}
+
+#video-preview {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 4px;
+}
+
+/* ==================== STATUS BAR ==================== */
+
+.status-bar {
+    background: #1a1a1a;
+    border-top: 1px solid #404040;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: #b0b0b0;
+}
+
+.status-left,
+.status-right {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+/* ==================== MODAL STYLES ==================== */
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.modal-content {
+    background: #2d2d2d;
+    border-radius: 8px;
+    max-width: 600px;
+    max-height: 80vh;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #404040;
+}
+
+.modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #404040;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    font-size: 18px;
+    color: #ffffff;
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.modal-close:hover {
+    background: #404040;
+    color: #ffffff;
+}
+
+.modal-body {
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid #404040;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* ==================== SETTINGS MODAL ==================== */
+
+.settings-section {
+    margin-bottom: 24px;
+}
+
+.settings-section h3 {
+    font-size: 16px;
+    color: #ffffff;
+    margin-bottom: 12px;
+}
+
+.setting-item {
+    margin-bottom: 16px;
+}
+
+.setting-item label {
+    display: block;
+    font-size: 14px;
+    color: #e0e0e0;
+    margin-bottom: 8px;
+}
+
+.setting-item small {
+    display: block;
+    color: #888;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.radio-option input[type="radio"] {
+    margin: 0;
+    margin-top: 2px;
+}
+
+.radio-label {
+    flex: 1;
+}
+
+.startup-file-selection {
+    margin-top: 12px;
+    padding: 12px;
+    background: #333;
+    border-radius: 4px;
+}
+
+.file-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.file-input-group input {
+    flex: 1;
+}
+
+.displays-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.display-item {
+    padding: 8px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    margin: 4px 0;
+    background: #333;
+}
+
+/* ==================== FORM ELEMENTS ==================== */
+
+input, select, textarea, button {
+    font-family: inherit;
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    height: 4px;
+    background: #555;
+    border-radius: 2px;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #0d7377;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #0d7377;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+input[type="checkbox"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+}
+
+input[type="checkbox"]:checked {
+    background: #0d7377;
+    border-color: #0d7377;
+}
+
+input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* ==================== SCROLLBARS ==================== */
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #2a2a2a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+/* ==================== UTILITIES ==================== */
+
+.text-center {
+    text-align: center;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.mb-0 { margin-bottom: 0; }
+.mb-1 { margin-bottom: 4px; }
+.mb-2 { margin-bottom: 8px; }
+.mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; }
+
+.mt-0 { margin-top: 0; }
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mt-4 { margin-top: 16px; }
+
+.hidden {
+    display: none;
+}
+
+.visible {
+    display: block;
+}
+
+/* ==================== RESPONSIVE DESIGN ==================== */
+
+@media (max-width: 1024px) {
+    .main-content {
+        flex-direction: column;
+    }
+    
+    .cue-list-section,
+    .inspector-section,
+    .video-preview-section {
+        width: 100%;
+    }
+    
+    .inspector-section {
+        max-height: 300px;
+    }
+}
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        gap: 12px;
+        padding: 12px;
+    }
+    
+    .transport-controls {
+        order: -1;
+    }
+    
+    .cue-controls {
+        flex-wrap: wrap;
+    }
+    
+    .btn-small {
+        font-size: 11px;
+        padding: 4px 8px;
+    }
 }
