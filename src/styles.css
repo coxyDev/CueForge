@@ -1,32 +1,27 @@
-/* MINIMAL CSS Enhancement for Playhead Functionality */
-/* ADD these styles to your existing src/styles.css (don't replace anything) */
-
-/* ==================== PLAYHEAD INDICATOR ==================== */
+/* ==================== PLAYHEAD INDICATOR FIXES ==================== */
 
 /* Cue that is "standing by" (ready for GO) */
 .cue-item.standing-by {
-    border-left: 3px solid #28a745;
-    background: linear-gradient(90deg, rgba(40, 167, 69, 0.15) 0%, transparent 60%);
+    border-left: 3px solid #28a745 !important;
+    background: linear-gradient(90deg, rgba(40, 167, 69, 0.15) 0%, transparent 60%) !important;
 }
 
 /* Make the playhead arrow green and slightly glowing */
 .cue-item.standing-by .cue-number {
-    color: #28a745;
-    font-weight: bold;
+    color: #28a745 !important;
+    font-weight: bold !important;
 }
 
 /* If a cue is both selected AND standing by */
 .cue-item.selected.standing-by {
-    border-left: 3px solid #28a745;
+    border-left: 3px solid #28a745 !important;
     background: linear-gradient(90deg, 
         rgba(40, 167, 69, 0.15) 0%, 
         rgba(13, 115, 119, 0.15) 60%, 
-        transparent 100%);
+        transparent 100%) !important;
 }
 
-/* ==================== ENHANCED GO BUTTON ==================== */
-
-/* Visual feedback for which cue is standing by */
+/* Enhanced GO button when standby cue is available */
 .go-btn.has-standby-cue::after {
     content: '';
     position: absolute;
@@ -37,8 +32,6 @@
     background: #28a745;
     border-radius: 0 0 6px 6px;
 }
-
-/* ==================== SUBTLE ENHANCEMENTS ==================== */
 
 /* Slight animation for playhead indicator */
 .cue-item.standing-by .cue-number {
@@ -52,16 +45,11 @@
 
 /* Enhanced hover states for better UX */
 .cue-item:hover {
-    background-color: #252525;
+    background-color: #252525 !important;
 }
 
 .cue-item.standing-by:hover {
-    background: linear-gradient(90deg, rgba(40, 167, 69, 0.25) 0%, rgba(255, 255, 255, 0.05) 60%);
-}
-
-/* Cursor hints for different interactions */
-.cue-item {
-    cursor: pointer;
+    background: linear-gradient(90deg, rgba(40, 167, 69, 0.25) 0%, rgba(255, 255, 255, 0.05) 60%) !important;
 }
 
 /* Better visual hierarchy */
@@ -70,9 +58,154 @@
     z-index: 1;
 }
 
+/* Ensure playhead indicator is visible */
+.cue-number::before {
+    content: attr(data-playhead);
+    color: #28a745;
+    font-weight: bold;
+    margin-right: 4px;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
     .cue-item.standing-by .cue-number {
         animation: none;
     }
+}
+
+/* ==================== GENERAL UI FIXES ==================== */
+
+/* Ensure proper cue item spacing and visibility */
+.cue-item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin: 2px 0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: grid;
+    grid-template-columns: 60px 1fr 80px 100px 80px;
+    align-items: center;
+    gap: 12px;
+    min-height: 40px;
+}
+
+/* Fix cue selection highlighting */
+.cue-item.selected {
+    background-color: rgba(13, 115, 119, 0.3) !important;
+    border: 1px solid #0d7377;
+}
+
+/* Improve cue type icons */
+.cue-number {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+/* Better status indicators */
+.cue-status.playing {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.cue-status.paused {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.cue-status.loaded {
+    color: #6c757d;
+}
+
+/* Transport button improvements */
+.transport-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.transport-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+/* GO button enhancement when cue is standing by */
+.go-btn:not(.has-standby-cue) {
+    opacity: 0.7;
+}
+
+.go-btn.has-standby-cue {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.3);
+}
+
+/* Cue list header improvements */
+.cue-list-header {
+    background: #2a2a2a;
+    padding: 8px 12px;
+    border-radius: 4px 4px 0 0;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: grid;
+    grid-template-columns: 60px 1fr 80px 100px 80px;
+    gap: 12px;
+}
+
+/* Better scrolling for cue list */
+.cue-list {
+    max-height: calc(100vh - 300px);
+    overflow-y: auto;
+    border: 1px solid #444;
+    border-radius: 0 0 4px 4px;
+}
+
+/* Inspector panel improvements */
+.inspector-content {
+    padding: 16px;
+}
+
+.inspector-placeholder {
+    text-align: center;
+    color: #888;
+    font-style: italic;
+    padding: 40px 20px;
+}
+
+/* Status bar improvements */
+.status-bar {
+    background: #1a1a1a;
+    border-top: 1px solid #444;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-left: 8px;
+}
+
+.status-indicator.stopped {
+    background: #6c757d;
+}
+
+.status-indicator.playing {
+    background: #28a745;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.paused {
+    background: #ffc107;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
 }
