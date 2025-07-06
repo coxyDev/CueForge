@@ -1,24 +1,27 @@
 /**
- * Enhanced Cue Manager with Complete Targeting System
- * Implements QLab-style cue targeting for professional show control
+ * Enhanced Cue Manager with Multi-Selection and Advanced Grouping
+ * Supports professional workflows with group creation and cue reordering
  */
 
 class CueManager {
     constructor() {
         this.cues = [];
         this.currentCueIndex = -1;
-        this.selectedCueId = null;
-        this.standByCueId = null; // Which cue is ready for GO button
+        this.selectedCueIds = new Set(); // Changed to support multi-selection
+        this.standByCueId = null;
         this.lastGoTime = 0;
         this.goDebounceMs = 200;
         this.isPaused = false;
         this.showName = 'Untitled Show';
         this.showFilePath = null;
         this.unsavedChanges = false;
-        this.activeCues = new Map(); // cueId -> execution data
+        this.activeCues = new Map();
         this.singleCueMode = true;
         this.autoContinueEnabled = true;
         this.masterVolume = 1.0;
+        
+        // Group management
+        this.expandedGroups = new Set(); // Track which groups are expanded
         
         this.listeners = {
             cueAdded: [],
@@ -29,10 +32,11 @@ class CueManager {
             showChanged: [],
             volumeChanged: [],
             settingsChanged: [],
-            playheadChanged: []
+            playheadChanged: [],
+            cueMoved: [] // New: for drag & drop
         };
 
-        // 🎯 NEW: Cue type definitions with targeting requirements
+        // Cue type definitions with targeting requirements
         this.cueTypeDefinitions = {
             // No target required
             'wait': { requiresTarget: false, targetType: 'none', defaultName: 'wait' },
@@ -54,77 +58,442 @@ class CueManager {
         };
     }
 
-    // ==================== PLAYHEAD MANAGEMENT ====================
+    // ==================== MULTI-SELECTION SYSTEM ====================
 
     /**
-     * Set which cue is "standing by" (ready for GO)
+     * Select a single cue (clears other selections)
      */
-    setStandByCue(cueId) {
-        const oldStandBy = this.standByCueId;
-        this.standByCueId = cueId;
+    selectCue(cueId) {
+        const oldSelection = new Set(this.selectedCueIds);
+        this.selectedCueIds.clear();
         
-        console.log(`Playhead moved to: ${cueId ? this.getCue(cueId)?.number : 'none'}`);
+        if (cueId) {
+            this.selectedCueIds.add(cueId);
+        }
         
-        this.emit('playheadChanged', { 
-            standByCueId: this.standByCueId,
-            previousStandByCueId: oldStandBy
+        this.emit('selectionChanged', { 
+            selectedCueIds: Array.from(this.selectedCueIds),
+            previousSelection: Array.from(oldSelection),
+            selectionType: 'single'
         });
     }
 
     /**
-     * Get the cue that's currently "standing by"
+     * Add a cue to the selection (multi-select)
      */
-    getStandByCue() {
-        return this.standByCueId ? this.getCue(this.standByCueId) : null;
+    addToSelection(cueId) {
+        if (!cueId) return;
+        
+        const oldSelection = new Set(this.selectedCueIds);
+        this.selectedCueIds.add(cueId);
+        
+        this.emit('selectionChanged', { 
+            selectedCueIds: Array.from(this.selectedCueIds),
+            previousSelection: Array.from(oldSelection),
+            selectionType: 'add'
+        });
     }
 
     /**
-     * Move playhead to next cue in sequence
+     * Toggle a cue in the selection
      */
-    advancePlayhead() {
-        const currentCue = this.getStandByCue();
-        let nextCueId = null;
+    toggleSelection(cueId) {
+        if (!cueId) return;
         
-        if (currentCue) {
-            const currentIndex = this.getCueIndex(currentCue.id);
-            if (currentIndex + 1 < this.cues.length) {
-                nextCueId = this.cues[currentIndex + 1].id;
-            }
-        } else if (this.cues.length > 0) {
-            nextCueId = this.cues[0].id;
+        const oldSelection = new Set(this.selectedCueIds);
+        
+        if (this.selectedCueIds.has(cueId)) {
+            this.selectedCueIds.delete(cueId);
+        } else {
+            this.selectedCueIds.add(cueId);
         }
         
-        this.setStandByCue(nextCueId);
+        this.emit('selectionChanged', { 
+            selectedCueIds: Array.from(this.selectedCueIds),
+            previousSelection: Array.from(oldSelection),
+            selectionType: 'toggle'
+        });
     }
 
     /**
-     * QLab-style "Go To" cue functionality
+     * Select a range of cues (Shift+click behavior)
      */
-    goToCue(cueId) {
-        const targetCue = this.getCue(cueId);
-        if (!targetCue) {
-            console.error(`Cannot go to cue: ${cueId} not found`);
+    selectRange(fromCueId, toCueId) {
+        const fromIndex = this.getCueIndex(fromCueId);
+        const toIndex = this.getCueIndex(toCueId);
+        
+        if (fromIndex === -1 || toIndex === -1) return;
+        
+        const oldSelection = new Set(this.selectedCueIds);
+        const startIndex = Math.min(fromIndex, toIndex);
+        const endIndex = Math.max(fromIndex, toIndex);
+        
+        // Clear current selection
+        this.selectedCueIds.clear();
+        
+        // Select range
+        for (let i = startIndex; i <= endIndex; i++) {
+            this.selectedCueIds.add(this.cues[i].id);
+        }
+        
+        this.emit('selectionChanged', { 
+            selectedCueIds: Array.from(this.selectedCueIds),
+            previousSelection: Array.from(oldSelection),
+            selectionType: 'range'
+        });
+    }
+
+    /**
+     * Select all cues
+     */
+    selectAll() {
+        const oldSelection = new Set(this.selectedCueIds);
+        this.selectedCueIds.clear();
+        
+        this.cues.forEach(cue => {
+            this.selectedCueIds.add(cue.id);
+        });
+        
+        this.emit('selectionChanged', { 
+            selectedCueIds: Array.from(this.selectedCueIds),
+            previousSelection: Array.from(oldSelection),
+            selectionType: 'all'
+        });
+    }
+
+    /**
+     * Clear all selections
+     */
+    clearSelection() {
+        const oldSelection = new Set(this.selectedCueIds);
+        this.selectedCueIds.clear();
+        
+        this.emit('selectionChanged', { 
+            selectedCueIds: Array.from(this.selectedCueIds),
+            previousSelection: Array.from(oldSelection),
+            selectionType: 'clear'
+        });
+    }
+
+    /**
+     * Get all selected cues
+     */
+    getSelectedCues() {
+        return Array.from(this.selectedCueIds).map(id => this.getCue(id)).filter(Boolean);
+    }
+
+    /**
+     * Get the primary selected cue (first in selection order)
+     */
+    getPrimarySelectedCue() {
+        if (this.selectedCueIds.size === 0) return null;
+        const firstId = Array.from(this.selectedCueIds)[0];
+        return this.getCue(firstId);
+    }
+
+    /**
+     * Check if a cue is selected
+     */
+    isCueSelected(cueId) {
+        return this.selectedCueIds.has(cueId);
+    }
+
+    // ==================== GROUP MANAGEMENT SYSTEM ====================
+
+    /**
+     * Create a group cue from selected cues
+     */
+    createGroupFromSelection(groupOptions = {}) {
+        const selectedCues = this.getSelectedCues();
+        
+        if (selectedCues.length < 2) {
+            console.warn('Need at least 2 cues selected to create a group');
+            return null;
+        }
+
+        // Sort selected cues by their current order in the cue list
+        selectedCues.sort((a, b) => this.getCueIndex(a.id) - this.getCueIndex(b.id));
+        
+        // Find the position to insert the group (where the first selected cue is)
+        const insertIndex = this.getCueIndex(selectedCues[0].id);
+        
+        // Create the group cue
+        const groupCue = this.createCue('group', {
+            name: groupOptions.name || `Group ${this.getNextCueNumber()}`,
+            mode: groupOptions.mode || 'playlist',
+            ...groupOptions
+        });
+        
+        // Move selected cues into the group
+        groupCue.children = selectedCues.map(cue => {
+            // Remove from main cue list
+            const index = this.cues.findIndex(c => c.id === cue.id);
+            if (index !== -1) {
+                this.cues.splice(index, 1);
+            }
+            
+            // Reset cue numbers within the group (they'll be relative)
+            return { ...cue };
+        });
+        
+        // Renumber the children within the group
+        this.renumberGroupChildren(groupCue);
+        
+        // Insert the group at the position of the first selected cue
+        this.cues.splice(insertIndex, 0, groupCue);
+        
+        // Update cue numbers for the entire show
+        this.renumberAllCues();
+        
+        // Select just the new group
+        this.selectCue(groupCue.id);
+        
+        // Mark the group as expanded by default
+        this.expandedGroups.add(groupCue.id);
+        
+        this.markUnsaved();
+        this.emit('cueAdded', { cue: groupCue, index: insertIndex });
+        
+        console.log(`Created group with ${groupCue.children.length} cues`);
+        return groupCue;
+    }
+
+    /**
+     * Add selected cues to an existing group
+     */
+    addCuesToGroup(groupId) {
+        const group = this.getCue(groupId);
+        if (!group || group.type !== 'group') {
+            console.error('Target is not a group cue');
             return false;
         }
-        
-        console.log(`Going to cue: ${targetCue.number} - ${targetCue.name}`);
-        
-        if (this.singleCueMode && this.isAnyThingPlaying()) {
-            this.stop();
+
+        const selectedCues = this.getSelectedCues();
+        if (selectedCues.length === 0) {
+            console.warn('No cues selected to add to group');
+            return false;
         }
+
+        // Remove selected cues from main list and add to group
+        selectedCues.forEach(cue => {
+            if (cue.id === groupId) return; // Don't add group to itself
+            
+            const index = this.cues.findIndex(c => c.id === cue.id);
+            if (index !== -1) {
+                this.cues.splice(index, 1);
+                group.children.push(cue);
+            }
+        });
+
+        // Renumber everything
+        this.renumberGroupChildren(group);
+        this.renumberAllCues();
         
-        this.setStandByCue(cueId);
-        return this.go();
+        this.clearSelection();
+        this.markUnsaved();
+        this.emit('cueUpdated', { cue: group });
+        
+        console.log(`Added ${selectedCues.length} cues to group ${group.number}`);
+        return true;
     }
 
-    // ==================== ENHANCED CUE CREATION WITH TARGETING ====================
+    /**
+     * Remove cues from a group back to the main list
+     */
+    ungroupCues(groupId) {
+        const group = this.getCue(groupId);
+        if (!group || group.type !== 'group') {
+            console.error('Target is not a group cue');
+            return false;
+        }
+
+        if (!group.children || group.children.length === 0) {
+            // Just remove the empty group
+            this.removeCue(groupId);
+            return true;
+        }
+
+        // Find group position
+        const groupIndex = this.getCueIndex(groupId);
+        
+        // Insert children back into main list
+        const children = [...group.children];
+        this.cues.splice(groupIndex, 1); // Remove group first
+        
+        // Insert children at the group's former position
+        children.forEach((child, index) => {
+            this.cues.splice(groupIndex + index, 0, child);
+        });
+        
+        // Clear the group expansion state
+        this.expandedGroups.delete(groupId);
+        
+        // Renumber everything
+        this.renumberAllCues();
+        
+        // Select the ungrouped cues
+        this.selectedCueIds.clear();
+        children.forEach(child => this.selectedCueIds.add(child.id));
+        
+        this.markUnsaved();
+        this.emit('cueRemoved', { cue: group, index: groupIndex });
+        this.emit('selectionChanged', { 
+            selectedCueIds: Array.from(this.selectedCueIds),
+            selectionType: 'ungroup'
+        });
+        
+        console.log(`Ungrouped ${children.length} cues from group`);
+        return true;
+    }
 
     /**
-     * Create a new cue with proper targeting support
+     * Toggle group expansion state
      */
+    toggleGroupExpansion(groupId) {
+        if (this.expandedGroups.has(groupId)) {
+            this.expandedGroups.delete(groupId);
+        } else {
+            this.expandedGroups.add(groupId);
+        }
+        
+        this.emit('cueUpdated', { cue: this.getCue(groupId) });
+    }
+
+    /**
+     * Check if a group is expanded
+     */
+    isGroupExpanded(groupId) {
+        return this.expandedGroups.has(groupId);
+    }
+
+    /**
+     * Get all cues including those in groups (flattened list for display)
+     */
+    getFlattenedCues() {
+        const flattened = [];
+        
+        this.cues.forEach(cue => {
+            flattened.push(cue);
+            
+            // If it's an expanded group, add its children
+            if (cue.type === 'group' && this.isGroupExpanded(cue.id) && cue.children) {
+                cue.children.forEach(child => {
+                    flattened.push({
+                        ...child,
+                        isGroupChild: true,
+                        parentGroupId: cue.id,
+                        displayNumber: `${cue.number}.${child.number}`
+                    });
+                });
+            }
+        });
+        
+        return flattened;
+    }
+
+    // ==================== CUE REORDERING SYSTEM ====================
+
+    /**
+     * Move a cue to a new position
+     */
+    moveCue(cueId, newIndex) {
+        const currentIndex = this.getCueIndex(cueId);
+        if (currentIndex === -1 || newIndex < 0 || newIndex >= this.cues.length) {
+            return false;
+        }
+
+        // Remove cue from current position
+        const [cue] = this.cues.splice(currentIndex, 1);
+        
+        // Insert at new position
+        this.cues.splice(newIndex, 0, cue);
+        
+        // Renumber all cues
+        this.renumberAllCues();
+        
+        this.markUnsaved();
+        this.emit('cueMoved', { 
+            cue, 
+            fromIndex: currentIndex, 
+            toIndex: newIndex 
+        });
+        
+        return true;
+    }
+
+    /**
+     * Move multiple selected cues to a new position
+     */
+    moveSelectedCues(targetIndex) {
+        const selectedCues = this.getSelectedCues();
+        if (selectedCues.length === 0) return false;
+
+        // Sort by current position (reverse order for removal)
+        const sortedCues = selectedCues
+            .map(cue => ({ cue, index: this.getCueIndex(cue.id) }))
+            .sort((a, b) => b.index - a.index);
+
+        // Remove all selected cues (in reverse order to maintain indices)
+        sortedCues.forEach(({ cue, index }) => {
+            this.cues.splice(index, 1);
+        });
+
+        // Insert at target position
+        const cuesToInsert = sortedCues.reverse().map(item => item.cue);
+        this.cues.splice(targetIndex, 0, ...cuesToInsert);
+
+        // Renumber all cues
+        this.renumberAllCues();
+
+        this.markUnsaved();
+        this.emit('cueMoved', { 
+            cues: cuesToInsert,
+            toIndex: targetIndex 
+        });
+
+        return true;
+    }
+
+    // ==================== NUMBERING SYSTEM ====================
+
+    /**
+     * Renumber all cues in the main list
+     */
+    renumberAllCues() {
+        this.cues.forEach((cue, index) => {
+            cue.number = index + 1;
+            
+            // If it's a group, renumber its children
+            if (cue.type === 'group' && cue.children) {
+                this.renumberGroupChildren(cue);
+            }
+        });
+    }
+
+    /**
+     * Renumber children within a group
+     */
+    renumberGroupChildren(groupCue) {
+        if (!groupCue.children) return;
+        
+        groupCue.children.forEach((child, index) => {
+            child.number = index + 1;
+        });
+    }
+
+    /**
+     * Get the next available cue number
+     */
+    getNextCueNumber() {
+        if (this.cues.length === 0) return 1;
+        return Math.max(...this.cues.map(cue => cue.number)) + 1;
+    }
+
+    // ==================== ENHANCED CUE CREATION ====================
+
     createCue(type, options = {}) {
         const id = generateUUID();
-        const number = this.getNextCueNumber();
+        const number = options.number || this.getNextCueNumber();
         const definition = this.cueTypeDefinitions[type];
         
         if (!definition) {
@@ -152,11 +521,11 @@ class CueManager {
             postWait: 0,
             preWait: 0,
             
-            // 🎯 NEW: Targeting properties
-            target: null, // The actual target (file path, cue ID, etc.)
-            targetType: definition.targetType, // 'file', 'cue', or 'none'
+            // Targeting properties
+            target: null,
+            targetType: definition.targetType,
             requiresTarget: definition.requiresTarget,
-            isBroken: definition.requiresTarget, // Broken until target is set
+            isBroken: definition.requiresTarget,
             
             // Additional properties
             notes: '',
@@ -171,7 +540,7 @@ class CueManager {
         switch (type) {
             case 'audio':
                 Object.assign(baseCue, {
-                    duration: 0, // Will be set when file is loaded
+                    duration: 0,
                     fadeIn: 0,
                     fadeOut: 0,
                     startTime: 0,
@@ -183,7 +552,7 @@ class CueManager {
                 
             case 'video':
                 Object.assign(baseCue, {
-                    duration: 0, // Will be set when file is loaded
+                    duration: 0,
                     fadeIn: 0,
                     fadeOut: 0,
                     opacity: 1.0,
@@ -196,18 +565,19 @@ class CueManager {
                 
             case 'wait':
                 Object.assign(baseCue, {
-                    duration: 5000, // 5 seconds default
-                    isBroken: false // Wait cues don't need targets
+                    duration: 5000,
+                    isBroken: false
                 });
                 break;
                 
             case 'group':
                 Object.assign(baseCue, {
-                    mode: 'playlist', // 'playlist', 'start_first', 'start_random'
+                    mode: options.mode || 'playlist',
                     children: [],
                     crossfade: false,
                     loop: false,
-                    isBroken: false // Group cues don't need targets
+                    shuffle: false,
+                    isBroken: false
                 });
                 break;
 
@@ -218,18 +588,18 @@ class CueManager {
             case 'load':
             case 'reset':
                 Object.assign(baseCue, {
-                    duration: 0, // Instantaneous action
+                    duration: 0,
                     targetCueId: options.targetCueId || null
                 });
                 break;
 
             case 'fade':
                 Object.assign(baseCue, {
-                    duration: 5000, // 5 second default fade
+                    duration: 5000,
                     targetCueId: options.targetCueId || null,
-                    fadeType: 'absolute', // 'absolute' or 'relative'
-                    targetParameter: 'volume', // What to fade
-                    targetValue: 0.0 // Target fade value
+                    fadeType: 'absolute',
+                    targetParameter: 'volume',
+                    targetValue: 0.0
                 });
                 break;
         }
@@ -242,11 +612,8 @@ class CueManager {
         return baseCue;
     }
 
-    // ==================== TARGET MANAGEMENT SYSTEM ====================
+    // ==================== TARGETING SYSTEM (Preserved from previous implementation) ====================
 
-    /**
-     * Set a file target for a cue (Audio, Video, etc.)
-     */
     setFileTarget(cueId, filePath, fileName = null) {
         const cue = this.getCue(cueId);
         if (!cue) return false;
@@ -257,7 +624,6 @@ class CueManager {
             return false;
         }
 
-        // Validate file format
         const extension = filePath.split('.').pop().toLowerCase();
         if (!definition.acceptedFormats.includes(extension)) {
             console.error(`File format .${extension} not supported for ${cue.type} cues`);
@@ -268,7 +634,6 @@ class CueManager {
         cue.targetFile = filePath;
         cue.isBroken = false;
 
-        // Update cue name if using default name
         if (fileName && this.isDefaultName(cue)) {
             cue.name = fileName;
         }
@@ -279,9 +644,6 @@ class CueManager {
         return true;
     }
 
-    /**
-     * Set a cue target for a cue (Start, Stop, Fade, etc.)
-     */
     setCueTarget(cue, targetCueId) {
         if (typeof cue === 'string') {
             cue = this.getCue(cue);
@@ -300,7 +662,6 @@ class CueManager {
             return false;
         }
 
-        // Validate target cue type
         const acceptedTypes = definition.acceptedCueTypes;
         if (!acceptedTypes.includes('any') && !acceptedTypes.includes(targetCue.type)) {
             console.error(`Cue type ${cue.type} cannot target ${targetCue.type} cues`);
@@ -311,7 +672,6 @@ class CueManager {
         cue.targetCueId = targetCueId;
         cue.isBroken = false;
 
-        // Update cue name if using default name
         if (this.isDefaultName(cue)) {
             const targetName = targetCue.number ? targetCue.number : targetCue.name;
             cue.name = `${definition.defaultName} ${targetName}`;
@@ -323,9 +683,6 @@ class CueManager {
         return true;
     }
 
-    /**
-     * Clear the target for a cue
-     */
     clearTarget(cueId) {
         const cue = this.getCue(cueId);
         if (!cue) return false;
@@ -335,7 +692,6 @@ class CueManager {
         cue.targetCueId = null;
         cue.isBroken = cue.requiresTarget;
 
-        // Reset to default name
         const definition = this.cueTypeDefinitions[cue.type];
         if (definition) {
             cue.name = `${definition.defaultName} ${cue.number}`;
@@ -347,31 +703,25 @@ class CueManager {
         return true;
     }
 
-    /**
-     * Get target display text for UI
-     */
     getTargetDisplayText(cue) {
         if (!cue.requiresTarget) {
-            return ''; // No target needed
+            return '';
         }
 
         if (!cue.target) {
-            return '?'; // Missing target
+            return '?';
         }
 
         if (cue.targetType === 'file') {
-            // Show filename for file targets
             const fileName = cue.target.split('/').pop().split('\\').pop();
             return fileName || cue.target;
         }
 
         if (cue.targetType === 'cue') {
-            // Show target cue number or name
             const targetCue = this.getCue(cue.target);
             if (targetCue) {
                 return targetCue.number ? targetCue.number.toString() : targetCue.name;
             } else {
-                // Target cue was deleted
                 cue.isBroken = true;
                 return '⚠ Missing';
             }
@@ -380,9 +730,6 @@ class CueManager {
         return cue.target;
     }
 
-    /**
-     * Check if cue is using its default name
-     */
     isDefaultName(cue) {
         const definition = this.cueTypeDefinitions[cue.type];
         if (!definition) return false;
@@ -391,9 +738,6 @@ class CueManager {
         return defaultPattern.test(cue.name);
     }
 
-    /**
-     * Update all cues that target a renamed cue
-     */
     updateTargetingCueNames(updatedCue) {
         this.cues.forEach(cue => {
             if (cue.targetCueId === updatedCue.id && this.isDefaultName(cue)) {
@@ -407,7 +751,96 @@ class CueManager {
         });
     }
 
-    // ==================== ENHANCED GO METHOD ====================
+    // ==================== PLAYHEAD MANAGEMENT (Preserved) ====================
+
+    setStandByCue(cueId) {
+        const oldStandBy = this.standByCueId;
+        this.standByCueId = cueId;
+        
+        console.log(`Playhead moved to: ${cueId ? this.getCue(cueId)?.number : 'none'}`);
+        
+        this.emit('playheadChanged', { 
+            standByCueId: this.standByCueId,
+            previousStandByCueId: oldStandBy
+        });
+    }
+
+    getStandByCue() {
+        return this.standByCueId ? this.getCue(this.standByCueId) : null;
+    }
+
+    advancePlayhead() {
+        const currentCue = this.getStandByCue();
+        let nextCueId = null;
+        
+        if (currentCue) {
+            const currentIndex = this.getCueIndex(currentCue.id);
+            if (currentIndex + 1 < this.cues.length) {
+                nextCueId = this.cues[currentIndex + 1].id;
+            }
+        } else if (this.cues.length > 0) {
+            nextCueId = this.cues[0].id;
+        }
+        
+        this.setStandByCue(nextCueId);
+    }
+
+    goToCue(cueId) {
+        const targetCue = this.getCue(cueId);
+        if (!targetCue) {
+            console.error(`Cannot go to cue: ${cueId} not found`);
+            return false;
+        }
+        
+        console.log(`Going to cue: ${targetCue.number} - ${targetCue.name}`);
+        
+        if (this.singleCueMode && this.isAnyThingPlaying()) {
+            this.stop();
+        }
+        
+        this.setStandByCue(cueId);
+        return this.go();
+    }
+
+    // ==================== UTILITY METHODS ====================
+
+    getCue(cueId) {
+        // First check main cues
+        let cue = this.cues.find(cue => cue.id === cueId);
+        if (cue) return cue;
+        
+        // Then check within groups
+        for (const mainCue of this.cues) {
+            if (mainCue.type === 'group' && mainCue.children) {
+                cue = mainCue.children.find(child => child.id === cueId);
+                if (cue) return cue;
+            }
+        }
+        
+        return null;
+    }
+
+    getCueIndex(cueId) {
+        return this.cues.findIndex(cue => cue.id === cueId);
+    }
+
+    getNextCue(fromCueId = null) {
+        if (fromCueId) {
+            const currentIndex = this.getCueIndex(fromCueId);
+            return currentIndex + 1 < this.cues.length ? this.cues[currentIndex + 1] : null;
+        }
+        
+        const standByCue = this.getStandByCue();
+        if (standByCue) {
+            const standByIndex = this.getCueIndex(standByCue.id);
+            return standByIndex + 1 < this.cues.length ? this.cues[standByIndex + 1] : null;
+        }
+        
+        return this.cues.length > 0 ? this.cues[0] : null;
+    }
+
+    // Preserve all other methods from the previous implementation...
+    // (go, playCue, execution methods, etc. - keeping them the same)
 
     go() {
         const now = Date.now();
@@ -462,8 +895,6 @@ class CueManager {
         return success;
     }
 
-    // ==================== ENHANCED CUE EXECUTION ====================
-
     playCue(cueId) {
         const cue = this.getCue(cueId);
         if (!cue) {
@@ -471,7 +902,6 @@ class CueManager {
             return false;
         }
 
-        // Check if cue is broken (missing target)
         if (cue.isBroken) {
             console.error(`Cannot play broken cue: ${cue.number} - missing target`);
             return false;
@@ -521,8 +951,7 @@ class CueManager {
         return true;
     }
 
-    // ==================== CONTROL CUE EXECUTION ====================
-
+    // All execution methods remain the same...
     executeStartCue(cue) {
         console.log(`Executing Start cue: ${cue.number}`);
         
@@ -537,10 +966,8 @@ class CueManager {
             return;
         }
 
-        // Execute the target cue
         this.playCue(cue.targetCueId);
         
-        // Start cue completes immediately
         cue.status = 'loaded';
         this.emit('cueUpdated', { cue });
     }
@@ -553,10 +980,8 @@ class CueManager {
             return;
         }
 
-        // Stop the target cue
         this.stopSpecificCue(cue.targetCueId, false);
         
-        // Stop cue completes immediately
         cue.status = 'loaded';
         this.emit('cueUpdated', { cue });
     }
@@ -575,7 +1000,6 @@ class CueManager {
             this.emit('cueUpdated', { cue: targetCue });
         }
         
-        // Pause cue completes immediately
         cue.status = 'loaded';
         this.emit('cueUpdated', { cue });
     }
@@ -588,10 +1012,8 @@ class CueManager {
             return;
         }
 
-        // Move playhead to target cue
         this.setStandByCue(cue.targetCueId);
         
-        // GoTo cue completes immediately
         cue.status = 'loaded';
         this.emit('cueUpdated', { cue });
     }
@@ -614,15 +1036,12 @@ class CueManager {
         
         this.activeCues.set(cue.id, executionData);
         
-        // Simulate fade duration
         setTimeout(() => {
             this.completeCue(cue.id);
         }, cue.duration);
         
         this.emit('cueUpdated', { cue });
     }
-
-    // ==================== EXISTING EXECUTION METHODS ====================
 
     executeAudioCue(cue) {
         cue.status = 'playing';
@@ -685,77 +1104,14 @@ class CueManager {
         
         this.activeCues.set(cue.id, executionData);
         
+        // For basic implementation, just complete after 1 second
+        // In a full implementation, this would manage child cue playback
         setTimeout(() => {
             this.completeCue(cue.id);
         }, 1000);
         
         this.emit('cueUpdated', { cue });
     }
-
-    // ==================== ENHANCED CUE MANAGEMENT ====================
-
-    addCue(type, options = {}, index = -1) {
-        const cue = this.createCue(type, options);
-        
-        if (index === -1) {
-            this.cues.push(cue);
-        } else {
-            this.cues.splice(index, 0, cue);
-        }
-
-        if (this.cues.length === 1 && !this.standByCueId) {
-            this.setStandByCue(cue.id);
-        }
-
-        this.markUnsaved();
-        this.emit('cueAdded', { cue, index: index === -1 ? this.cues.length - 1 : index });
-        return cue;
-    }
-
-    removeCue(cueId) {
-        const index = this.cues.findIndex(cue => cue.id === cueId);
-        if (index === -1) return false;
-
-        const cue = this.cues[index];
-        
-        this.stopSpecificCue(cueId, false);
-        this.cues.splice(index, 1);
-
-        // Update any cues that targeted this cue
-        this.cues.forEach(c => {
-            if (c.targetCueId === cueId) {
-                c.target = null;
-                c.targetCueId = null;
-                c.isBroken = true;
-                this.emit('cueUpdated', { cue: c });
-            }
-        });
-
-        // Clear playhead if removed cue was standing by
-        if (this.standByCueId === cueId) {
-            if (index < this.cues.length) {
-                this.setStandByCue(this.cues[index].id);
-            } else if (index > 0) {
-                this.setStandByCue(this.cues[index - 1].id);
-            } else {
-                this.setStandByCue(null);
-            }
-        }
-
-        if (index <= this.currentCueIndex) {
-            this.currentCueIndex = Math.max(-1, this.currentCueIndex - 1);
-        }
-
-        if (this.selectedCueId === cueId) {
-            this.selectCue(null);
-        }
-
-        this.markUnsaved();
-        this.emit('cueRemoved', { cue, index });
-        return true;
-    }
-
-    // ==================== UTILITY METHODS ====================
 
     completeCue(cueId) {
         const cue = this.getCue(cueId);
@@ -780,49 +1136,78 @@ class CueManager {
         this.emit('playbackStateChanged', { activeCues: this.getActiveCues() });
     }
 
-    // ==================== EXISTING UTILITY METHODS ====================
-
-    getCue(cueId) {
-        return this.cues.find(cue => cue.id === cueId);
-    }
-
-    getCueIndex(cueId) {
-        return this.cues.findIndex(cue => cue.id === cueId);
-    }
-
-    getNextCueNumber() {
-        if (this.cues.length === 0) return 1;
-        const lastCue = this.cues[this.cues.length - 1];
-        return lastCue.number + 1;
-    }
-
-    getNextCue(fromCueId = null) {
-        if (fromCueId) {
-            const currentIndex = this.getCueIndex(fromCueId);
-            return currentIndex + 1 < this.cues.length ? this.cues[currentIndex + 1] : null;
+    // Rest of methods remain the same (stop, pause, etc.)...
+    addCue(type, options = {}, index = -1) {
+        const cue = this.createCue(type, options);
+        
+        if (index === -1) {
+            this.cues.push(cue);
+        } else {
+            this.cues.splice(index, 0, cue);
         }
-        
-        const standByCue = this.getStandByCue();
-        if (standByCue) {
-            const standByIndex = this.getCueIndex(standByCue.id);
-            return standByIndex + 1 < this.cues.length ? this.cues[standByIndex + 1] : null;
+
+        // Renumber cues after insertion
+        this.renumberAllCues();
+
+        if (this.cues.length === 1 && !this.standByCueId) {
+            this.setStandByCue(cue.id);
         }
-        
-        return this.cues.length > 0 ? this.cues[0] : null;
+
+        this.markUnsaved();
+        this.emit('cueAdded', { cue, index: index === -1 ? this.cues.length - 1 : index });
+        return cue;
     }
 
-    selectCue(cueId) {
-        const oldSelection = this.selectedCueId;
-        this.selectedCueId = cueId;
+    removeCue(cueId) {
+        const index = this.getCueIndex(cueId);
+        if (index === -1) return false;
+
+        const cue = this.cues[index];
         
-        this.emit('selectionChanged', { 
-            selectedCueId: this.selectedCueId,
-            previousSelectionId: oldSelection
+        this.stopSpecificCue(cueId, false);
+        this.cues.splice(index, 1);
+
+        // Update any cues that targeted this cue
+        this.cues.forEach(c => {
+            if (c.targetCueId === cueId) {
+                c.target = null;
+                c.targetCueId = null;
+                c.isBroken = true;
+                this.emit('cueUpdated', { cue: c });
+            }
         });
-    }
 
-    getSelectedCue() {
-        return this.selectedCueId ? this.getCue(this.selectedCueId) : null;
+        // Remove from selection
+        this.selectedCueIds.delete(cueId);
+        
+        // Clear group expansion state
+        this.expandedGroups.delete(cueId);
+
+        // Clear playhead if removed cue was standing by
+        if (this.standByCueId === cueId) {
+            if (index < this.cues.length) {
+                this.setStandByCue(this.cues[index].id);
+            } else if (index > 0) {
+                this.setStandByCue(this.cues[index - 1].id);
+            } else {
+                this.setStandByCue(null);
+            }
+        }
+
+        if (index <= this.currentCueIndex) {
+            this.currentCueIndex = Math.max(-1, this.currentCueIndex - 1);
+        }
+
+        // Renumber remaining cues
+        this.renumberAllCues();
+
+        this.markUnsaved();
+        this.emit('cueRemoved', { cue, index });
+        this.emit('selectionChanged', { 
+            selectedCueIds: Array.from(this.selectedCueIds),
+            selectionType: 'update'
+        });
+        return true;
     }
 
     stop() {
@@ -942,16 +1327,21 @@ class CueManager {
     newShow() {
         this.cues = [];
         this.currentCueIndex = -1;
-        this.selectedCueId = null;
+        this.selectedCueIds.clear();
         this.standByCueId = null;
         this.activeCues.clear();
         this.isPaused = false;
         this.showName = 'Untitled Show';
         this.showFilePath = null;
         this.unsavedChanges = false;
+        this.expandedGroups.clear();
         
         this.emit('showChanged', { showName: this.showName, unsavedChanges: false });
         this.emit('playbackStateChanged', { activeCues: [], isPaused: false });
+        this.emit('selectionChanged', { 
+            selectedCueIds: [],
+            selectionType: 'clear'
+        });
     }
 
     markUnsaved() {
@@ -984,6 +1374,8 @@ class CueManager {
             total: this.cues.length,
             active: this.activeCues.size,
             broken: this.cues.filter(cue => cue.isBroken).length,
+            groups: this.cues.filter(cue => cue.type === 'group').length,
+            selected: this.selectedCueIds.size,
             types: {}
         };
         
