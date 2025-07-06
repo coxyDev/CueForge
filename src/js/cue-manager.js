@@ -261,41 +261,71 @@ class CueManager {
     /**
      * Add selected cues to an existing group
      */
-    addCuesToGroup(groupId) {
-        const group = this.getCue(groupId);
-        if (!group || group.type !== 'group') {
-            console.error('Target is not a group cue');
-            return false;
-        }
-
-        const selectedCues = this.getSelectedCues();
-        if (selectedCues.length === 0) {
-            console.warn('No cues selected to add to group');
-            return false;
-        }
-
-        // Remove selected cues from main list and add to group
-        selectedCues.forEach(cue => {
-            if (cue.id === groupId) return; // Don't add group to itself
-            
-            const index = this.cues.findIndex(c => c.id === cue.id);
-            if (index !== -1) {
-                this.cues.splice(index, 1);
-                group.children.push(cue);
-            }
-        });
-
-        // Renumber everything
-        this.renumberGroupChildren(group);
-        this.renumberAllCues();
-        
-        this.clearSelection();
-        this.markUnsaved();
-        this.emit('cueUpdated', { cue: group });
-        
-        console.log(`Added ${selectedCues.length} cues to group ${group.number}`);
-        return true;
+    addCuesToGroup(groupId, cuesToAdd = null) {
+    const group = this.getCue(groupId);
+    if (!group || group.type !== 'group') {
+        console.error('Target is not a group cue');
+        return false;
     }
+
+    // Use provided cues or get selected cues
+    const cues = cuesToAdd || this.getSelectedCues();
+    if (cues.length === 0) {
+        console.warn('No cues to add to group');
+        return false;
+    }
+
+    // Initialize children array if it doesn't exist
+    if (!group.children) {
+        group.children = [];
+    }
+
+    // Filter out invalid cues (can't add group to itself, etc.)
+    const validCues = cues.filter(cue => {
+        if (cue.id === groupId) {
+            console.warn('Cannot add group to itself');
+            return false;
+        }
+        return true;
+    });
+
+    if (validCues.length === 0) {
+        console.warn('No valid cues to add to group');
+        return false;
+    }
+
+    // Remove cues from main list and add to group
+    validCues.forEach(cue => {
+        const index = this.cues.findIndex(c => c.id === cue.id);
+        if (index !== -1) {
+            // Remove from main cue list
+            this.cues.splice(index, 1);
+            
+            // Add to group children
+            group.children.push({...cue});
+        }
+    });
+
+    // Renumber everything
+    this.renumberGroupChildren(group);
+    this.renumberAllCues();
+    
+    // Clear selection since cues are now in the group
+    this.clearSelection();
+    
+    // Select the group instead
+    this.selectCue(groupId);
+    
+    this.markUnsaved();
+    this.emit('cueUpdated', { cue: group });
+    this.emit('selectionChanged', { 
+        selectedCueIds: [groupId],
+        selectionType: 'group_modified'
+    });
+    
+    console.log(`Added ${validCues.length} cues to group ${group.number}`);
+    return true;
+}
 
     /**
      * Remove cues from a group back to the main list

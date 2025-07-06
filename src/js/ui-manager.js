@@ -513,7 +513,39 @@ class UIManager {
     }
 
     // ==================== DRAG AND DROP SYSTEM ====================
-
+    handleDrop(e) {
+    if (!this.isDragging) return;
+    
+    e.preventDefault();
+    
+    try {
+        const dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
+        if (dragData.type !== 'cue-reorder') return;
+        
+        const dropTarget = e.target.closest('.cue-item');
+        if (!dropTarget) return;
+        
+        const targetCueId = dropTarget.dataset.cueId;
+        const targetCue = this.cueManager.getCue(targetCueId);
+        
+        // Don't drop on self
+        if (dragData.cueIds.includes(targetCueId)) return;
+        
+        // Check if dropping onto a group cue
+        if (targetCue && targetCue.type === 'group') {
+            // Dropping onto a group - add cues to the group
+            this.handleDropIntoGroup(targetCueId, dragData.cueIds);
+        } else {
+            // Regular reordering
+            this.handleDropForReordering(e, dropTarget, dragData);
+        }
+        
+    } catch (error) {
+        console.error('Error handling drop:', error);
+    }
+    
+    this.cleanupDrag();
+}
     handleDragStart(e, cue) {
         this.isDragging = true;
         
@@ -540,118 +572,91 @@ class UIManager {
     }
 
     handleDragOver(e) {
-        if (!this.isDragging) return;
+    if (!this.isDragging) return;
+    
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    const cueItem = e.target.closest('.cue-item');
+    if (!cueItem) return;
+    
+    // Remove previous indicators
+    document.querySelectorAll('.drop-indicator, .group-drop-highlight').forEach(el => el.remove());
+    
+    const targetCueId = cueItem.dataset.cueId;
+    const targetCue = this.cueManager.getCue(targetCueId);
+    
+    if (targetCue && targetCue.type === 'group') {
+        // Highlight the group for dropping into it
+        cueItem.classList.add('group-drop-target');
         
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        // Add visual feedback for group drop
+        const groupHighlight = document.createElement('div');
+        groupHighlight.className = 'group-drop-highlight';
+        groupHighlight.style.cssText = `
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            background: rgba(13, 115, 119, 0.2);
+            border: 2px dashed #0d7377;
+            pointer-events: none;
+            z-index: 999;
+        `;
         
-        // Add visual drop indicator
-        const cueItem = e.target.closest('.cue-item');
-        if (cueItem) {
-            // Remove previous indicators
-            document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
-            
-            // Add drop indicator
-            const rect = cueItem.getBoundingClientRect();
-            const midpoint = rect.top + rect.height / 2;
-            const insertBefore = e.clientY < midpoint;
-            
-            const indicator = document.createElement('div');
-            indicator.className = 'drop-indicator';
-            indicator.style.cssText = `
-                position: absolute;
-                left: 0;
-                right: 0;
-                height: 2px;
-                background: #0d7377;
-                z-index: 1000;
-                pointer-events: none;
-            `;
-            
-            if (insertBefore) {
-                indicator.style.top = `${rect.top - 1}px`;
-            } else {
-                indicator.style.top = `${rect.bottom - 1}px`;
-            }
-            
-            document.body.appendChild(indicator);
-        }
-    }
-
-    handleDrop(e) {
-        if (!this.isDragging) return;
+        const rect = cueItem.getBoundingClientRect();
+        groupHighlight.style.top = `${rect.top}px`;
+        groupHighlight.style.left = `${rect.left}px`;
+        groupHighlight.style.width = `${rect.width}px`;
+        groupHighlight.style.height = `${rect.height}px`;
         
-        e.preventDefault();
+        document.body.appendChild(groupHighlight);
+    } else {
+        // Regular drop indicator for reordering
+        cueItem.classList.remove('group-drop-target');
         
-        try {
-            const dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
-            if (dragData.type !== 'cue-reorder') return;
-            
-            const dropTarget = e.target.closest('.cue-item');
-            if (!dropTarget) return;
-            
-            const targetIndex = parseInt(dropTarget.dataset.index);
-            const targetCueId = dropTarget.dataset.cueId;
-            
-            // Don't drop on self
-            if (dragData.cueIds.includes(targetCueId)) return;
-            
-            // Calculate drop position
-            const rect = dropTarget.getBoundingClientRect();
-            const midpoint = rect.top + rect.height / 2;
-            const insertBefore = e.clientY < midpoint;
-            
-            let newIndex = targetIndex;
-            if (!insertBefore) {
-                newIndex = targetIndex + 1;
-            }
-            
-            // Perform the move
-            if (this.draggedCues.length === 1) {
-                this.cueManager.moveCue(this.draggedCues[0].id, newIndex);
-            } else {
-                this.cueManager.moveSelectedCues(newIndex);
-            }
-            
-            console.log(`Dropped ${this.draggedCues.length} cue(s) at index ${newIndex}`);
-            
-        } catch (error) {
-            console.error('Error handling drop:', error);
+        const rect = cueItem.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        const insertBefore = e.clientY < midpoint;
+        
+        const indicator = document.createElement('div');
+        indicator.className = 'drop-indicator';
+        indicator.style.cssText = `
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #0d7377;
+            z-index: 1000;
+            pointer-events: none;
+            box-shadow: 0 0 4px rgba(13, 115, 119, 0.6);
+        `;
+        
+        if (insertBefore) {
+            indicator.style.top = `${rect.top - 1}px`;
+        } else {
+            indicator.style.top = `${rect.bottom - 1}px`;
         }
         
-        this.cleanupDrag();
+        document.body.appendChild(indicator);
     }
-
-    cleanupDrag() {
-        if (!this.isDragging) return;
-        
-        this.isDragging = false;
-        this.draggedCue = null;
-        this.draggedCues = [];
-        
-        // Remove visual indicators
-        document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
-        
-        // Reset opacity
-        document.querySelectorAll('.cue-item').forEach(el => {
-            el.style.opacity = '';
-        });
-    }
-
-    // ==================== GROUP MANAGEMENT ====================
-
+}
     /**
-     * Handle group cue creation - either empty group or from selection
-     */
-    handleGroupCueCreation() {
-        const selectedCues = this.cueManager.getSelectedCues();
+ * Handle group cue creation - either empty group or from selection
+ */
+handleGroupCueCreation() {
+    const selectedCues = this.cueManager.getSelectedCues();
+    
+    if (selectedCues.length >= 2) {
+        // Create group from selection with default name
+        const defaultGroupName = `Group ${this.cueManager.getNextCueNumber()}`;
         
-        if (selectedCues.length >= 2) {
-            // Create group from selection
-            const groupName = prompt('Enter group name:', `Group ${this.cueManager.getNextCueNumber()}`);
-            if (groupName !== null) {
+        // Show custom group name dialog
+        this.showGroupNameDialog(defaultGroupName, (groupName) => {
+            if (groupName && groupName.trim()) {
                 const group = this.cueManager.createGroupFromSelection({
-                    name: groupName,
+                    name: groupName.trim(),
                     mode: 'playlist' // Default mode
                 });
                 
@@ -659,11 +664,332 @@ class UIManager {
                     this.showStatusMessage(`Created group "${groupName}" with ${selectedCues.length} cues`, 'success');
                 }
             }
-        } else {
-            // Create empty group
-            this.addCue('group');
-        }
+        });
+    } else {
+        // Create empty group with default name
+        const defaultGroupName = `Group ${this.cueManager.getNextCueNumber()}`;
+        this.addCue('group', { name: defaultGroupName });
+        this.showStatusMessage(`Created empty group "${defaultGroupName}"`, 'success');
     }
+}
+
+/**
+ * Show custom group name dialog (replaces prompt())
+ */
+showGroupNameDialog(defaultName, callback) {
+    // Remove any existing dialog
+    const existingDialog = document.getElementById('group-name-dialog');
+    if (existingDialog) {
+        existingDialog.remove();
+    }
+    
+    // Create dialog
+    const dialog = document.createElement('div');
+    dialog.id = 'group-name-dialog';
+    dialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    `;
+    
+    dialog.innerHTML = `
+        <div style="
+            background: #2a2a2a;
+            color: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            min-width: 300px;
+            max-width: 500px;
+        ">
+            <h3 style="margin: 0 0 16px 0; color: #0d7377;">Create Group</h3>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 14px;">Group Name:</label>
+                <input type="text" id="group-name-input" value="${defaultName}" style="
+                    width: 100%;
+                    padding: 8px 12px;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    background: #1a1a1a;
+                    color: white;
+                    font-size: 14px;
+                    box-sizing: border-box;
+                ">
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button id="group-dialog-cancel" style="
+                    padding: 8px 16px;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    background: transparent;
+                    color: white;
+                    cursor: pointer;
+                ">Cancel</button>
+                <button id="group-dialog-create" style="
+                    padding: 8px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    background: #0d7377;
+                    color: white;
+                    cursor: pointer;
+                ">Create Group</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    const input = document.getElementById('group-name-input');
+    const cancelBtn = document.getElementById('group-dialog-cancel');
+    const createBtn = document.getElementById('group-dialog-create');
+    
+    // Focus and select text
+    input.focus();
+    input.select();
+    
+    // Handle create
+    const handleCreate = () => {
+        const groupName = input.value.trim();
+        if (groupName) {
+            callback(groupName);
+        }
+        dialog.remove();
+    };
+    
+    // Handle cancel
+    const handleCancel = () => {
+        dialog.remove();
+    };
+    
+    // Event listeners
+    createBtn.addEventListener('click', handleCreate);
+    cancelBtn.addEventListener('click', handleCancel);
+    
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleCreate();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancel();
+        }
+    });
+    
+    // Click outside to cancel
+    dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+            handleCancel();
+        }
+    });
+}
+
+    cleanupDrag() {
+    if (!this.isDragging) return;
+    
+    this.isDragging = false;
+    this.draggedCue = null;
+    this.draggedCues = [];
+    
+    // Remove visual indicators
+    document.querySelectorAll('.drop-indicator, .group-drop-highlight, .drag-count-indicator').forEach(el => el.remove());
+    
+    // Reset opacity and classes
+    document.querySelectorAll('.cue-item').forEach(el => {
+        el.style.opacity = '';
+        el.classList.remove('dragging', 'group-drop-target');
+    });
+    
+    console.log('Drag operation cleaned up');
+}
+
+handleDropIntoGroup(groupId, draggedCueIds) {
+    const group = this.cueManager.getCue(groupId);
+    if (!group || group.type !== 'group') {
+        console.error('Invalid group target');
+        return;
+    }
+    
+    // Don't add group to itself
+    if (draggedCueIds.includes(groupId)) {
+        this.showStatusMessage('Cannot add group to itself', 'warning');
+        return;
+    }
+    
+    const draggedCues = draggedCueIds.map(id => this.cueManager.getCue(id)).filter(Boolean);
+    
+    if (draggedCues.length === 0) {
+        this.showStatusMessage('No valid cues to add to group', 'warning');
+        return;
+    }
+    
+    // Add cues to the group
+    const success = this.cueManager.addCuesToGroup(groupId, draggedCues);
+    
+    if (success) {
+        // Expand the group to show the new cues
+        if (!this.cueManager.isGroupExpanded(groupId)) {
+            this.cueManager.toggleGroupExpansion(groupId);
+        }
+        
+        this.showStatusMessage(`Added ${draggedCues.length} cue(s) to group "${group.name}"`, 'success');
+    } else {
+        this.showStatusMessage('Failed to add cues to group', 'error');
+    }
+}
+
+    // ==================== GROUP MANAGEMENT ====================
+
+handleGroupCueCreation() {
+    const selectedCues = this.cueManager.getSelectedCues();
+    
+    if (selectedCues.length >= 2) {
+        // Create group from selection with default name
+        const defaultGroupName = `Group ${this.cueManager.getNextCueNumber()}`;
+        
+        // Show custom group name dialog
+        this.showGroupNameDialog(defaultGroupName, (groupName) => {
+            if (groupName && groupName.trim()) {
+                const group = this.cueManager.createGroupFromSelection({
+                    name: groupName.trim(),
+                    mode: 'playlist' // Default mode
+                });
+                
+                if (group) {
+                    this.showStatusMessage(`Created group "${groupName}" with ${selectedCues.length} cues`, 'success');
+                }
+            }
+        });
+    } else {
+        // Create empty group with default name
+        const defaultGroupName = `Group ${this.cueManager.getNextCueNumber()}`;
+        this.addCue('group', { name: defaultGroupName });
+        this.showStatusMessage(`Created empty group "${defaultGroupName}"`, 'success');
+    }
+}
+
+/**
+ * Show custom group name dialog (replaces prompt())
+ */
+showGroupNameDialog(defaultName, callback) {
+    // Remove any existing dialog
+    const existingDialog = document.getElementById('group-name-dialog');
+    if (existingDialog) {
+        existingDialog.remove();
+    }
+    
+    // Create dialog
+    const dialog = document.createElement('div');
+    dialog.id = 'group-name-dialog';
+    dialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    `;
+    
+    dialog.innerHTML = `
+        <div style="
+            background: #2a2a2a;
+            color: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            min-width: 300px;
+            max-width: 500px;
+        ">
+            <h3 style="margin: 0 0 16px 0; color: #0d7377;">Create Group</h3>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 14px;">Group Name:</label>
+                <input type="text" id="group-name-input" value="${defaultName}" style="
+                    width: 100%;
+                    padding: 8px 12px;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    background: #1a1a1a;
+                    color: white;
+                    font-size: 14px;
+                    box-sizing: border-box;
+                ">
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button id="group-dialog-cancel" style="
+                    padding: 8px 16px;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    background: transparent;
+                    color: white;
+                    cursor: pointer;
+                ">Cancel</button>
+                <button id="group-dialog-create" style="
+                    padding: 8px 16px;
+                    border: none;
+                    border-radius: 4px;
+                    background: #0d7377;
+                    color: white;
+                    cursor: pointer;
+                ">Create Group</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    const input = document.getElementById('group-name-input');
+    const cancelBtn = document.getElementById('group-dialog-cancel');
+    const createBtn = document.getElementById('group-dialog-create');
+    
+    // Focus and select text
+    input.focus();
+    input.select();
+    
+    // Handle create
+    const handleCreate = () => {
+        const groupName = input.value.trim();
+        if (groupName) {
+            callback(groupName);
+        }
+        dialog.remove();
+    };
+    
+    // Handle cancel
+    const handleCancel = () => {
+        dialog.remove();
+    };
+    
+    // Event listeners
+    createBtn.addEventListener('click', handleCreate);
+    cancelBtn.addEventListener('click', handleCancel);
+    
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleCreate();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancel();
+        }
+    });
+    
+    // Click outside to cancel
+    dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+            handleCancel();
+        }
+    });
+}
 
     /**
      * Update group button state based on selection
@@ -681,6 +1007,29 @@ class UIManager {
             }
         }
     }
+
+    handleDropForReordering(e, dropTarget, dragData) {
+    const targetIndex = parseInt(dropTarget.dataset.index);
+    
+    // Calculate drop position
+    const rect = dropTarget.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const insertBefore = e.clientY < midpoint;
+    
+    let newIndex = targetIndex;
+    if (!insertBefore) {
+        newIndex = targetIndex + 1;
+    }
+    
+    // Perform the move
+    if (this.draggedCues.length === 1) {
+        this.cueManager.moveCue(this.draggedCues[0].id, newIndex);
+    } else {
+        this.cueManager.moveSelectedCues(newIndex);
+    }
+    
+    console.log(`Dropped ${this.draggedCues.length} cue(s) at index ${newIndex}`);
+}
 
     // ==================== ENHANCED INSPECTOR ====================
 
@@ -1207,27 +1556,54 @@ class UIManager {
         return '';
     }
 
-    addCue(type) {
-        const cue = this.cueManager.addCue(type);
-        this.cueManager.selectCue(cue.id);
-        this.showStatusMessage(`Added ${type} cue`, 'success');
+    addCue(type, options = {}) {
+    try {
+        const cue = this.cueManager.addCue(type, options);
+        if (cue) {
+            this.showStatusMessage(`Added ${type} cue: ${cue.name}`, 'success');
+            // Select the new cue
+            this.cueManager.selectCue(cue.id);
+        }
+        return cue;
+    } catch (error) {
+        console.error('Error adding cue:', error);
+        this.showStatusMessage(`Failed to add ${type} cue`, 'error');
+        return null;
     }
+}
 
     addControlCue(type) {
-        const selectedCues = this.cueManager.getSelectedCues();
+    // Check if we have a selected cue to target
+    const selectedCues = this.cueManager.getSelectedCues();
+    
+    if (selectedCues.length === 1) {
+        // Create control cue targeting the selected cue
+        const targetCue = selectedCues[0];
+        const controlCue = this.addCue(type, {
+            name: `${type} ${targetCue.number}`,
+            targetCueId: targetCue.id,
+            target: {
+                type: 'cue',
+                cueId: targetCue.id,
+                cueNumber: targetCue.number
+            },
+            isBroken: false // Has a target, so not broken
+        });
         
-        if (selectedCues.length === 1) {
-            // Create control cue targeting the selected cue
-            const cue = this.cueManager.addCue(type, { targetCueId: selectedCues[0].id });
-            this.cueManager.selectCue(cue.id);
-            this.showStatusMessage(`Added ${type} cue targeting cue ${selectedCues[0].number}`, 'success');
-        } else {
-            // Create control cue without target
-            const cue = this.cueManager.addCue(type);
-            this.cueManager.selectCue(cue.id);
-            this.showStatusMessage(`Added ${type} cue - click target to set`, 'info');
+        if (controlCue) {
+            this.showStatusMessage(`Created ${type} cue targeting cue ${targetCue.number}`, 'success');
+        }
+    } else {
+        // Create control cue without target (user will need to set target later)
+        const controlCue = this.addCue(type, {
+            name: `${type} cue`
+        });
+        
+        if (controlCue) {
+            this.showStatusMessage(`Created ${type} cue - set target in inspector`, 'info');
         }
     }
+}
 
     updateTransportButtons() {
         const isPlaying = this.cueManager.hasActiveCues();
