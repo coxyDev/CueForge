@@ -1,944 +1,470 @@
-// Main application initialization with improved error handling
+/**
+ * CueForge Application Initialization
+ * Sets up the complete targeting system and all components
+ */
+
 class CueForgeApp {
     constructor() {
         this.cueManager = null;
-        this.audioEngine = null;
-        this.videoEngine = null;
         this.uiManager = null;
-        this.displayManager = null;
+        this.audioEngine = null;
         this.initialized = false;
-        this.appSettings = null;
-
-        this.init();
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.initialize());
+        } else {
+            this.initialize();
+        }
     }
 
-    async init() {
+    async initialize() {
         try {
-            console.log('Initializing CueForge...');
+            console.log('🎬 Initializing CueForge with Targeting System...');
             
-            // Initialize core systems with error handling
-            await this.initializeCoreComponents();
+            // Initialize core systems
+            this.initializeCoreComponents();
             
-            // Initialize optional components
-            await this.initializeOptionalComponents();
-            
-            // Set up global references
+            // Set up global references for debugging and modal interactions
             this.setupGlobalReferences();
             
-            // Initialize UI
-            await this.initializeUI();
+            // Load demo content
+            this.loadDemoContent();
             
-            // Set up error handling and cleanup
+            // Set up error handling
             this.setupErrorHandling();
-            this.setupCleanup();
-            
-            // Apply startup preferences instead of always loading sample data
-            await this.applyStartupPreferences();
-            
-            // Add basic playback functionality
-            this.setupBasicPlayback();
             
             this.initialized = true;
-            console.log('CueForge initialized successfully');
+            console.log('✅ CueForge targeting system initialized successfully!');
+            
+            // Show welcome message
+            this.showWelcomeMessage();
             
         } catch (error) {
-            console.error('Failed to initialize CueForge:', error);
-            this.showError('Failed to initialize application', error.message);
+            console.error('❌ Failed to initialize CueForge:', error);
+            this.showInitializationError(error);
         }
     }
 
-     // New method to load app settings
-    async loadAppSettings() {
-        try {
-            if (this.apiAvailable && window.qlabAPI) {
-                this.appSettings = await window.qlabAPI.loadAppSettings();
-                console.log('App settings loaded:', this.appSettings);
-            } else {
-                console.warn('API not available for loading settings, using defaults');
-                this.appSettings = this.getDefaultSettings();
-            }
-        } catch (error) {
-            console.error('Failed to load app settings:', error);
-            this.appSettings = this.getDefaultSettings();
-        }
-    }
-
-    // Default settings fallback
-    getDefaultSettings() {
-        return {
-            startupMode: 'template',
-            startupFilePath: null,
-            preferences: {
-                singleCueMode: true,
-                autoContinueEnabled: true,
-                masterVolume: 1.0
+    initializeCoreComponents() {
+        // Initialize Audio Engine (basic implementation)
+        this.audioEngine = {
+            stopAllCues: () => {
+                console.log('Audio engine: Stopping all audio cues');
+            },
+            playAudio: (filePath) => {
+                console.log(`Audio engine: Playing ${filePath}`);
             }
         };
-    }
 
-    // Check if APIs are available
-    get apiAvailable() {
-        return typeof window.qlabAPI !== 'undefined' && 
-               typeof window.electronAPI !== 'undefined' && 
-               typeof window.fs !== 'undefined';
-    }
-
-    // Apply startup preferences instead of always loading sample data
-    async applyStartupPreferences() {
-        try {
-            console.log('Applying startup preferences...');
-            
-            if (!this.appSettings) {
-                console.warn('No app settings available, loading template');
-                this.initSampleData();
-                return;
-            }
-
-            switch (this.appSettings.startupMode) {
-                case 'template':
-                    console.log('Loading sample template cues');
-                    this.initSampleData();
-                    break;
-                    
-                case 'file':
-                    if (this.appSettings.startupFilePath) {
-                        console.log('Loading startup file:', this.appSettings.startupFilePath);
-                        const success = await this.loadStartupFile(this.appSettings.startupFilePath);
-                        if (!success) {
-                            console.warn('Failed to load startup file, falling back to template');
-                            this.initSampleData();
-                        }
-                    } else {
-                        console.warn('No startup file specified, falling back to template');
-                        this.initSampleData();
-                    }
-                    break;
-                    
-                case 'empty':
-                    console.log('Starting with empty cue list');
-                    // Do nothing - cue manager starts empty
-                    this.cueManager.newShow();
-                    break;
-                    
-                default:
-                    console.warn('Unknown startup mode, loading template');
-                    this.initSampleData();
-                    break;
-            }
-
-            // Apply other preferences
-            if (this.appSettings.preferences) {
-                this.applyUserPreferences();
-            }
-            
-        } catch (error) {
-            console.error('Error applying startup preferences:', error);
-            // Fallback to template
-            this.initSampleData();
-        }
-    }
-
-    // Load startup file
-    async loadStartupFile(filePath) {
-        try {
-            if (!this.apiAvailable) {
-                console.error('Cannot load startup file: API not available');
-                return false;
-            }
-
-            console.log('Attempting to load startup file:', filePath);
-            const success = await this.cueManager.loadShow(filePath);
-            
-            if (success) {
-                console.log('Startup file loaded successfully');
-                return true;
-            } else {
-                console.error('Failed to load startup file');
-                return false;
-            }
-        } catch (error) {
-            console.error('Error loading startup file:', error);
-            return false;
-        }
-    }
-
-    // Apply user preferences from settings
-    applyUserPreferences() {
-        try {
-            const prefs = this.appSettings.preferences;
-            
-            if (prefs.singleCueMode !== undefined) {
-                this.cueManager.setSingleCueMode(prefs.singleCueMode);
-            }
-            
-            if (prefs.autoContinueEnabled !== undefined) {
-                this.cueManager.setAutoContinueEnabled(prefs.autoContinueEnabled);
-            }
-            
-            if (prefs.masterVolume !== undefined) {
-                this.cueManager.setMasterVolume(prefs.masterVolume);
-            }
-            
-            console.log('User preferences applied');
-        } catch (error) {
-            console.error('Error applying user preferences:', error);
-        }
-    }
-
-    // Modified initSampleData method to be more explicit
-    initSampleData() {
-        try {
-            console.log('Initializing with sample template cues...');
-            
-            // Clear any existing cues
-            this.cueManager.newShow();
-            
-            // Add sample cues for demonstration
-            this.cueManager.addCue('wait', {
-                name: 'House to Half',
-                duration: 3000
-            });
-            
-            this.cueManager.addCue('audio', {
-                name: 'Welcome Music',
-                volume: 0.8,
-                fadeIn: 2000,
-                fadeOut: 1000
-            });
-            
-            this.cueManager.addCue('video', {
-                name: 'Opening Video',
-                volume: 0.9,
-                fadeIn: 1000,
-                fullscreen: false
-            });
-            
-            this.cueManager.addCue('wait', {
-                name: 'Speaker Introduction',
-                duration: 15000
-            });
-            
-            this.cueManager.addCue('group', {
-                name: 'Scene Change',
-                mode: 'sequential'
-            });
-            
-            // Mark as template (not unsaved changes)
-            this.cueManager.unsavedChanges = false;
-            this.cueManager.showName = 'Sample Template';
-            
-            console.log('✓ Sample template cues loaded');
-        } catch (error) {
-            console.warn('Failed to load sample cues:', error);
-        }
-    }
-
-    // New method to get current settings for saving
-    getCurrentAppSettings() {
-        return {
-            ...this.appSettings,
-            preferences: {
-                singleCueMode: this.cueManager.getSingleCueMode(),
-                autoContinueEnabled: this.cueManager.getAutoContinueEnabled(),
-                masterVolume: this.cueManager.getMasterVolume()
-            }
-        };
-    }
-
-    async initializeCoreComponents() {
-        // Initialize cue manager
-        try {
-            this.cueManager = new CueManager();
-            console.log('✓ Cue Manager initialized');
-        } catch (error) {
-            throw new Error(`Failed to initialize CueManager: ${error.message}`);
-        }
-
-        // Initialize audio engine
-        try {
-            this.audioEngine = new AudioEngine();
-            await this.waitForAudioEngine();
-            console.log('✓ Audio Engine initialized');
-        } catch (error) {
-            console.warn('Audio Engine failed to initialize:', error.message);
-            // Create a fallback audio engine
-            this.audioEngine = this.createFallbackAudioEngine();
-        }
-
-        // Initialize video engine
-        try {
-            this.videoEngine = new VideoEngine();
-            console.log('✓ Video Engine initialized');
-        } catch (error) {
-            console.warn('Video Engine failed to initialize:', error.message);
-            // Create a fallback video engine
-            this.videoEngine = this.createFallbackVideoEngine();
-        }
-    }
-
-    async initializeOptionalComponents() {
-        // Initialize display manager (optional)
-        try {
-            if (typeof DisplayManager !== 'undefined') {
-                this.displayManager = new DisplayManager();
-                await this.waitForDisplayManager();
-                console.log('✓ Display Manager initialized');
-            } else {
-                console.log('ℹ Display Manager not available - using fallback');
-                this.displayManager = new window.DisplayManager(); // Fallback from HTML
-            }
-        } catch (error) {
-            console.warn('Display Manager failed to initialize:', error.message);
-            this.displayManager = new window.DisplayManager(); // Fallback
-        }
+        // Initialize Cue Manager with targeting system
+        this.cueManager = new CueManager();
+        
+        // Initialize UI Manager with targeting support
+        this.uiManager = new UIManager(this.cueManager, this.audioEngine);
+        
+        console.log('✅ Core components initialized');
     }
 
     setupGlobalReferences() {
-        // Make engines globally available
+        // Set global references for modal interactions and debugging
+        window.cueManager = this.cueManager;
+        window.uiManager = this.uiManager;
         window.audioEngine = this.audioEngine;
-        window.videoEngine = this.videoEngine;
-        window.displayManager = this.displayManager;
+        window.app = this;
         
-        console.log('✓ Global references established');
+        console.log('✅ Global references set up');
     }
 
-    async initializeUI() {
-        try {
-            this.uiManager = new UIManager(this.cueManager, this.audioEngine);
-            
-            // Enhance audio engine with fade support
-            if (this.uiManager.enhanceAudioEngineWithFades) {
-                this.uiManager.enhanceAudioEngineWithFades();
-            }
-            
-            console.log('✓ UI Manager initialized');
-        } catch (error) {
-            throw new Error(`Failed to initialize UI Manager: ${error.message}`);
+    loadDemoContent() {
+        console.log('📝 Loading demo content with targeting examples...');
+        
+        // Create demo show with targeting examples
+        this.cueManager.newShow();
+        this.cueManager.showName = 'Demo Show - Targeting System';
+        
+        // Add demo cues that showcase the targeting system
+        
+        // 1. Audio cue (needs file target)
+        const audioCue = this.cueManager.addCue('audio', {
+            name: 'Background Music',
+            duration: 30000 // 30 seconds
+        });
+        
+        // 2. Video cue (needs file target) 
+        const videoCue = this.cueManager.addCue('video', {
+            name: 'Title Sequence',
+            duration: 15000 // 15 seconds
+        });
+        
+        // 3. Wait cue (no target needed)
+        const waitCue = this.cueManager.addCue('wait', {
+            name: 'Wait for applause',
+            duration: 5000 // 5 seconds
+        });
+        
+        // 4. Start cue targeting the audio cue
+        const startCue = this.cueManager.addCue('start', {
+            targetCueId: audioCue.id
+        });
+        
+        // 5. Fade cue targeting the audio cue
+        const fadeCue = this.cueManager.addCue('fade', {
+            targetCueId: audioCue.id,
+            duration: 3000 // 3 second fade
+        });
+        
+        // 6. Stop cue targeting the video cue
+        const stopCue = this.cueManager.addCue('stop', {
+            targetCueId: videoCue.id
+        });
+        
+        // 7. GoTo cue targeting the wait cue
+        const gotoWaitCue = this.cueManager.addCue('goto', {
+            targetCueId: waitCue.id
+        });
+        
+        // 8. Another audio cue (broken - no target)
+        const brokenAudioCue = this.cueManager.addCue('audio', {
+            name: 'Missing Audio File'
+        });
+        
+        // 9. Start cue with no target (broken)
+        const brokenStartCue = this.cueManager.addCue('start', {
+            name: 'Broken Start Cue'
+        });
+        
+        // 10. Group cue (no target needed)
+        const groupCue = this.cueManager.addCue('group', {
+            name: 'Lighting Sequence',
+            mode: 'playlist'
+        });
+        
+        // Set first cue as standing by
+        if (this.cueManager.cues.length > 0) {
+            this.cueManager.setStandByCue(this.cueManager.cues[0].id);
         }
-    }
-
-    async waitForDisplayManager() {
-        if (!this.displayManager) return;
         
-        let attempts = 0;
-        const maxAttempts = 30;
-        
-        while (!this.displayManager.initialized && attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-        
-        if (!this.displayManager.initialized) {
-            console.warn('Display manager failed to initialize properly');
-        }
-    }
-
-    async waitForAudioEngine() {
-        let attempts = 0;
-        const maxAttempts = 50;
-        
-        while (!this.audioEngine.initialized && attempts < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-        
-        if (!this.audioEngine.initialized) {
-            console.warn('Audio engine failed to initialize properly');
-        }
-    }
-
-    createFallbackAudioEngine() {
-        return {
-            initialized: true,
-            masterVolume: 1.0,
-            activeSounds: new Map(),
-            
-            playCue: async (cue, onComplete, onError) => {
-                console.log(`Fallback: Playing audio cue ${cue.name}`);
-                setTimeout(() => {
-                    if (onComplete) onComplete();
-                }, cue.duration || 1000);
-            },
-            
-            stopCue: (cueId) => {
-                console.log(`Fallback: Stopping audio cue ${cueId}`);
-            },
-            
-            pauseCue: (cueId) => {
-                console.log(`Fallback: Pausing audio cue ${cueId}`);
-            },
-            
-            resumeCue: (cueId) => {
-                console.log(`Fallback: Resuming audio cue ${cueId}`);
-            },
-            
-            stopAllCues: () => {
-                console.log('Fallback: Stopping all audio cues');
-            },
-            
-            setMasterVolume: (volume) => {
-                this.masterVolume = volume;
-                console.log(`Fallback: Set master volume to ${Math.round(volume * 100)}%`);
-            },
-            
-            setCueVolume: (cueId, volume) => {
-                console.log(`Fallback: Set cue ${cueId} volume to ${Math.round(volume * 100)}%`);
-                return true;
-            },
-            
-            getCueVolume: (cueId) => {
-                return 1.0;
-            },
-            
-            getMasterVolume: () => {
-                return this.masterVolume;
-            },
-            
-            hasActiveCues: () => {
-                return false;
-            },
-            
-            getPlaybackStatus: () => {
-                return {};
-            },
-            
-            isPlaying: (cueId) => {
-                return false;
-            },
-            
-            getActiveCues: () => {
-                return [];
-            },
-            
-            getAudioFileInfo: async (filePath) => {
-                console.log(`Fallback: Getting audio file info for ${filePath}`);
-                return {
-                    duration: 10000,
-                    sampleRate: 44100,
-                    channels: 2,
-                    length: 441000
-                };
-            },
-            
-            getSupportedAudioFormats: () => {
-                return [
-                    { type: 'audio/mpeg', ext: 'mp3' },
-                    { type: 'audio/wav', ext: 'wav' },
-                    { type: 'audio/ogg', ext: 'ogg' }
-                ];
-            },
-            
-            destroy: () => {
-                console.log('Fallback: Audio engine destroyed');
-            }
-        };
-    }
-
-    createFallbackVideoEngine() {
-        return {
-            initialized: true,
-            masterVolume: 1.0,
-            activeVideos: new Map(),
-            videoPreview: null,
-            
-            playCue: async (cue, onComplete, onError) => {
-                console.log(`Fallback: Playing video cue ${cue.name}`);
-                setTimeout(() => {
-                    if (onComplete) onComplete();
-                }, cue.duration || 1000);
-            },
-            
-            stopCue: (cueId) => {
-                console.log(`Fallback: Stopping video cue ${cueId}`);
-            },
-            
-            pauseCue: (cueId) => {
-                console.log(`Fallback: Pausing video cue ${cueId}`);
-            },
-            
-            resumeCue: (cueId) => {
-                console.log(`Fallback: Resuming video cue ${cueId}`);
-            },
-            
-            stopAllCues: () => {
-                console.log('Fallback: Stopping all video cues');
-            },
-            
-            setMasterVolume: (volume) => {
-                this.masterVolume = volume;
-                console.log(`Fallback: Set video master volume to ${Math.round(volume * 100)}%`);
-            },
-            
-            setCueVolume: (cueId, volume) => {
-                console.log(`Fallback: Set video cue ${cueId} volume to ${Math.round(volume * 100)}%`);
-                return true;
-            },
-            
-            getCueVolume: (cueId) => {
-                return 1.0;
-            },
-            
-            getMasterVolume: () => {
-                return this.masterVolume;
-            },
-            
-            hasActiveCues: () => {
-                return false;
-            },
-            
-            getPlaybackStatus: () => {
-                return {};
-            },
-            
-            isPlaying: (cueId) => {
-                return false;
-            },
-            
-            getActiveCues: () => {
-                return [];
-            },
-            
-            getVideoFileInfo: async (filePath) => {
-                console.log(`Fallback: Getting video file info for ${filePath}`);
-                return {
-                    duration: 10000,
-                    width: 1920,
-                    height: 1080,
-                    aspectRatio: 16/9
-                };
-            },
-            
-            getDetailedVideoInfo: async (filePath) => {
-                console.log(`Fallback: Getting detailed video info for ${filePath}`);
-                return {
-                    duration: 10000,
-                    durationSeconds: 10,
-                    width: 1920,
-                    height: 1080,
-                    aspectRatio: 16/9,
-                    frameRate: 30,
-                    totalFrames: 300,
-                    hasAudio: true
-                };
-            },
-            
-            getSupportedVideoFormats: () => {
-                return [
-                    { type: 'video/mp4', ext: 'mp4' },
-                    { type: 'video/webm', ext: 'webm' },
-                    { type: 'video/ogg', ext: 'ogv' }
-                ];
-            },
-            
-            previewVideoInInspector: (filePath) => {
-                console.log(`Fallback: Previewing video ${filePath} in inspector`);
-                const videoSection = document.getElementById('video-preview-section');
-                const videoPreview = document.getElementById('video-preview');
-                
-                if (videoSection && videoPreview) {
-                    videoPreview.src = filePath;
-                    videoSection.style.display = 'flex';
-                }
-            },
-            
-            previewVideoWithTimeline: (filePath, canvas) => {
-                console.log(`Fallback: Previewing video ${filePath} with timeline`);
-                this.previewVideoInInspector(filePath);
-                
-                if (canvas && window.VideoTimeline) {
-                    this.videoTimeline = new VideoTimeline(canvas);
-                }
-            },
-            
-            hideVideoPreview: () => {
-                console.log('Fallback: Hiding video preview');
-                const videoSection = document.getElementById('video-preview-section');
-                if (videoSection) {
-                    videoSection.style.display = 'none';
-                }
-            },
-            
-            initializeVideoTimeline: (video, canvas) => {
-                console.log('Fallback: Initializing video timeline');
-                if (canvas && window.VideoTimeline) {
-                    this.videoTimeline = new VideoTimeline(canvas);
-                    if (video) {
-                        this.videoTimeline.setVideo(video);
-                    }
-                }
-            },
-            
-            destroy: () => {
-                console.log('Fallback: Video engine destroyed');
-                this.hideVideoPreview();
-            }
-        };
-    }
-
-    setupBasicPlayback() {
-        // Override the cue manager's execute methods to actually play cues
-        const originalExecuteAudioCue = this.cueManager.executeAudioCue;
-        const originalExecuteVideoCue = this.cueManager.executeVideoCue;
-        
-        this.cueManager.executeAudioCue = async (cue) => {
-            console.log(`Playing audio cue: ${cue.name}`);
-            return new Promise((resolve, reject) => {
-                this.audioEngine.playCue(cue, resolve, reject);
-            });
-        };
-        
-        this.cueManager.executeVideoCue = async (cue) => {
-            console.log(`Playing video cue: ${cue.name}`);
-            
-            // Use display manager if available
-            if (this.displayManager && this.displayManager.getCurrentRouting() !== 'preview') {
-                const success = await this.displayManager.playVideoOnOutput(cue);
-                if (success) {
-                    return Promise.resolve();
-                }
-            }
-            
-            // Fallback to preview window
-            return new Promise((resolve, reject) => {
-                this.videoEngine.playCue(cue, resolve, reject);
-            });
-        };
-        
-        console.log('✓ Basic playback functionality enabled');
-    }
-
-    initSampleData() {
-        try {
-            // Add some sample cues for demonstration
-            this.cueManager.addCue('wait', {
-                name: 'House to Half',
-                duration: 3000
-            });
-            
-            this.cueManager.addCue('audio', {
-                name: 'Welcome Music',
-                volume: 0.8,
-                fadeIn: 2000,
-                fadeOut: 1000
-            });
-            
-            this.cueManager.addCue('video', {
-                name: 'Opening Video',
-                volume: 0.9,
-                fadeIn: 1000,
-                fullscreen: false
-            });
-            
-            this.cueManager.addCue('wait', {
-                name: 'Speaker Introduction',
-                duration: 15000
-            });
-            
-            this.cueManager.addCue('group', {
-                name: 'Scene Change',
-                mode: 'sequential'
-            });
-            
-            console.log('✓ Sample cues added');
-        } catch (error) {
-            console.warn('Failed to add sample cues:', error);
-        }
+        console.log(`✅ Demo content loaded: ${this.cueManager.cues.length} cues`);
+        console.log(`📊 Broken cues: ${this.cueManager.cues.filter(c => c.isBroken).length}`);
     }
 
     setupErrorHandling() {
         // Global error handler
         window.addEventListener('error', (event) => {
             console.error('Global error:', event.error);
-            this.showError('Application Error', event.error.message);
+            this.handleError(event.error);
         });
-        
-        // Unhandled promise rejection handler
+
+        // Promise rejection handler
         window.addEventListener('unhandledrejection', (event) => {
             console.error('Unhandled promise rejection:', event.reason);
-            this.showError('Promise Rejection', event.reason.toString());
+            this.handleError(event.reason);
         });
-    }
-
-   setupCleanup() {
-    // Clean up on window close
-    window.addEventListener('beforeunload', async (event) => {
-        // Save current settings
-        try {
-            if (this.apiAvailable && this.cueManager) {
-                const currentSettings = this.getCurrentAppSettings();
-                // Use synchronous save approach for beforeunload
-                navigator.sendBeacon('/save-settings', JSON.stringify(currentSettings));
-            }
-        } catch (error) {
-            console.warn('Error saving settings on beforeunload:', error);
-        }
-
-        // Check for unsaved changes
-        if (this.cueManager && this.cueManager.unsavedChanges) {
-            event.preventDefault();
-            event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-            return event.returnValue;
-        }
         
-        this.cleanup();
-    });
-}
+        console.log('✅ Error handling set up');
+    }
 
-   async  cleanup() {
-        try {
-            // Save current preferences before cleanup
-            if (this.apiAvailable && this.cueManager) {
-                const currentSettings = this.getCurrentAppSettings();
-                await window.qlabAPI.saveAppSettings(currentSettings);
-                console.log('Settings saved on cleanup');
-            }
-        } catch (error) {
-            console.warn('Error saving settings during cleanup:', error);
+    handleError(error) {
+        // Don't spam with too many error notifications
+        if (this.lastErrorTime && Date.now() - this.lastErrorTime < 1000) {
+            return;
         }
-
-        try {
-            if (this.audioEngine && this.audioEngine.destroy) {
-                this.audioEngine.destroy();
-            }
-            
-            if (this.videoEngine && this.videoEngine.destroy) {
-                this.videoEngine.destroy();
-            }
-            
-            if (this.displayManager && this.displayManager.destroy) {
-                this.displayManager.destroy();
-            }
-            
-            console.log('Application cleanup completed');
-        } catch (error) {
-            console.warn('Error during cleanup:', error);
+        this.lastErrorTime = Date.now();
+        
+        const errorMessage = error.message || error.toString();
+        
+        // Show error in UI if available
+        if (this.uiManager && this.uiManager.showStatusMessage) {
+            this.uiManager.showStatusMessage(`Error: ${errorMessage}`, 'error');
         }
     }
 
-    showError(title, message) {
-        // Create a simple error dialog
-        const errorDialog = document.createElement('div');
-        errorDialog.style.cssText = `
+    showWelcomeMessage() {
+        // Show welcome message with targeting system info
+        setTimeout(() => {
+            if (this.uiManager && this.uiManager.showStatusMessage) {
+                this.uiManager.showStatusMessage('🎯 Targeting System Ready! Click cue targets to edit them.', 'success');
+            }
+        }, 1000);
+    }
+
+    showInitializationError(error) {
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = `
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #2d2d2d;
-            border: 2px solid #dc3545;
-            border-radius: 8px;
-            padding: 20px;
-            z-index: 10000;
-            color: white;
-            max-width: 400px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         `;
         
-        errorDialog.innerHTML = `
-            <h3 style="margin: 0 0 10px 0; color: #dc3545;">${title}</h3>
-            <p style="margin: 0 0 15px 0; font-size: 14px;">${message}</p>
-            <button id="error-close" style="
-                background: #dc3545;
+        errorDiv.innerHTML = `
+            <h1 style="color: #dc3545; margin-bottom: 20px;">❌ CueForge Initialization Error</h1>
+            <p>The application failed to start properly.</p>
+            <p style="margin-top: 10px; color: #888;">${error.message}</p>
+            <button onclick="location.reload()" style="
+                margin-top: 20px;
+                background: #28a745;
                 border: none;
                 color: white;
-                padding: 8px 16px;
+                padding: 10px 20px;
                 border-radius: 4px;
                 cursor: pointer;
-                float: right;
-            ">Close</button>
-            <div style="clear: both;"></div>
+                font-size: 14px;
+            ">Reload Page</button>
         `;
         
-        document.body.appendChild(errorDialog);
+        document.body.appendChild(errorDiv);
+    }
+
+    // ==================== UTILITY METHODS ====================
+
+    /**
+     * Add sample cues for testing the targeting system
+     */
+    addTargetingTestCues() {
+        if (!this.initialized) {
+            console.warn('App not initialized yet');
+            return;
+        }
+
+        console.log('🧪 Adding targeting test cues...');
         
-        document.getElementById('error-close').addEventListener('click', () => {
-            document.body.removeChild(errorDialog);
+        // Clear existing cues
+        this.cueManager.newShow();
+        this.cueManager.showName = 'Targeting Test Show';
+        
+        // Audio cue to be targeted
+        const targetAudio = this.cueManager.addCue('audio', {
+            name: 'Target Audio',
+            duration: 10000
         });
         
-        // Auto-remove after 10 seconds
-        setTimeout(() => {
-            if (document.body.contains(errorDialog)) {
-                document.body.removeChild(errorDialog);
+        // Video cue to be targeted  
+        const targetVideo = this.cueManager.addCue('video', {
+            name: 'Target Video',
+            duration: 8000
+        });
+        
+        // Wait cue
+        const waitCue = this.cueManager.addCue('wait', {
+            name: 'Intermission',
+            duration: 3000
+        });
+        
+        // Control cues targeting the above
+        this.cueManager.addCue('start', { targetCueId: targetAudio.id });
+        this.cueManager.addCue('fade', { targetCueId: targetAudio.id });
+        this.cueManager.addCue('stop', { targetCueId: targetVideo.id });
+        this.cueManager.addCue('goto', { targetCueId: waitCue.id });
+        
+        // Broken cues (no targets)
+        this.cueManager.addCue('audio', { name: 'Broken Audio' });
+        this.cueManager.addCue('start', { name: 'Broken Start' });
+        
+        // Set first cue as standing by
+        if (this.cueManager.cues.length > 0) {
+            this.cueManager.setStandByCue(this.cueManager.cues[0].id);
+        }
+        
+        console.log('✅ Targeting test cues added');
+    }
+
+    /**
+     * Get application statistics
+     */
+    getStats() {
+        if (!this.initialized) {
+            return { error: 'App not initialized' };
+        }
+        
+        const cueStats = this.cueManager.getCueStats();
+        
+        return {
+            initialized: this.initialized,
+            showName: this.cueManager.showName,
+            cues: cueStats,
+            playback: {
+                activeCues: this.cueManager.getActiveCues().length,
+                isPaused: this.cueManager.isPaused,
+                standByCue: this.cueManager.getStandByCue()?.number || null,
+                selectedCue: this.cueManager.getSelectedCue()?.number || null
+            },
+            targeting: {
+                cuesWithTargets: this.cueManager.cues.filter(c => c.target).length,
+                brokenCues: this.cueManager.cues.filter(c => c.isBroken).length,
+                fileTargets: this.cueManager.cues.filter(c => c.targetType === 'file').length,
+                cueTargets: this.cueManager.cues.filter(c => c.targetType === 'cue').length
             }
-        }, 10000);
+        };
     }
 
-    // Public API methods for debugging and external control
-    getCueManager() {
-        return this.cueManager;
-    }
-
-    getAudioEngine() {
-        return this.audioEngine;
-    }
-
-    getVideoEngine() {
-        return this.videoEngine;
-    }
-
-    getUIManager() {
-        return this.uiManager;
-    }
-
-    getDisplayManager() {
-        return this.displayManager;
-    }
-
-    // Development helpers
-    addTestAudioCue(name = 'Test Audio') {
-        return this.cueManager.addCue('audio', {
-            name: name,
-            volume: 0.7,
-            fadeIn: 1000,
-            fadeOut: 500
-        });
-    }
-
-    addTestVideoCue(name = 'Test Video') {
-        return this.cueManager.addCue('video', {
-            name: name,
-            volume: 0.8,
-            fadeIn: 500,
-            fadeOut: 500
-        });
-    }
-
-    addTestWaitCue(duration = 5000, name = 'Test Wait') {
-        return this.cueManager.addCue('wait', {
-            name: name,
-            duration: duration
-        });
-    }
-
+    /**
+     * Export show data (for debugging/testing)
+     */
     exportShow() {
+        if (!this.initialized) {
+            console.warn('App not initialized yet');
+            return null;
+        }
+        
+        const showData = {
+            version: '1.0.0',
+            showName: this.cueManager.showName,
+            cues: this.cueManager.cues.map(cue => ({
+                ...cue,
+                // Remove non-serializable properties
+                target: cue.target,
+                targetType: cue.targetType,
+                targetCueId: cue.targetCueId,
+                isBroken: cue.isBroken
+            })),
+            settings: {
+                singleCueMode: this.cueManager.getSingleCueMode(),
+                autoContinueEnabled: this.cueManager.getAutoContinueEnabled(),
+                masterVolume: this.cueManager.getMasterVolume()
+            },
+            playhead: {
+                standByCueId: this.cueManager.standByCueId,
+                selectedCueId: this.cueManager.selectedCueId
+            }
+        };
+        
+        // Create downloadable blob
+        const blob = new Blob([JSON.stringify(showData, null, 2)], { 
+            type: 'application/json' 
+        });
+        const url = URL.createObjectURL(blob);
+        
+        // Create download link
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${this.cueManager.showName || 'show'}.cueforge`;
+        a.click();
+        
+        URL.revokeObjectURL(url);
+        
+        console.log('✅ Show exported');
+        return showData;
+    }
+
+    /**
+     * Import show data (basic implementation)
+     */
+    importShow(showData) {
+        if (!this.initialized) {
+            console.warn('App not initialized yet');
+            return false;
+        }
+        
         try {
-            const showData = {
-                name: this.cueManager.showName,
-                version: '1.0',
-                exported: new Date().toISOString(),
-                cues: this.cueManager.cues,
-                settings: {
-                    currentCueIndex: this.cueManager.currentCueIndex
-                }
-            };
+            console.log('📥 Importing show data...');
             
-            const blob = new Blob([JSON.stringify(showData, null, 2)], { 
-                type: 'application/json' 
+            // Clear current show
+            this.cueManager.newShow();
+            
+            // Import basic data
+            this.cueManager.showName = showData.showName || 'Imported Show';
+            
+            // Import cues
+            showData.cues.forEach(cueData => {
+                const cue = this.cueManager.addCue(cueData.type, cueData);
             });
             
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${this.cueManager.showName.replace(/[^a-zA-Z0-9]/g, '_')}.qlab`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            // Restore settings
+            if (showData.settings) {
+                this.cueManager.setSingleCueMode(showData.settings.singleCueMode);
+                this.cueManager.setAutoContinueEnabled(showData.settings.autoContinueEnabled);
+                this.cueManager.setMasterVolume(showData.settings.masterVolume);
+            }
             
-            console.log('Show exported successfully');
+            // Restore playhead
+            if (showData.playhead && showData.playhead.standByCueId) {
+                this.cueManager.setStandByCue(showData.playhead.standByCueId);
+            }
+            
+            console.log('✅ Show imported successfully');
+            
+            if (this.uiManager) {
+                this.uiManager.showStatusMessage('Show imported successfully', 'success');
+            }
+            
+            return true;
         } catch (error) {
-            console.error('Failed to export show:', error);
-            this.showError('Export Error', error.message);
+            console.error('❌ Failed to import show:', error);
+            
+            if (this.uiManager) {
+                this.uiManager.showStatusMessage('Failed to import show', 'error');
+            }
+            
+            return false;
         }
     }
 
-    // Status and diagnostics
-    getStatus() {
-        return {
-            initialized: this.initialized,
-            components: {
-                cueManager: !!this.cueManager,
-                audioEngine: !!this.audioEngine && this.audioEngine.initialized,
-                videoEngine: !!this.videoEngine && this.videoEngine.initialized,
-                displayManager: !!this.displayManager && this.displayManager.initialized,
-                uiManager: !!this.uiManager
-            },
-            stats: this.cueManager ? this.cueManager.getCueStats() : null
-        };
+    /**
+     * Reset to demo content
+     */
+    resetToDemo() {
+        if (!this.initialized) {
+            console.warn('App not initialized yet');
+            return;
+        }
+        
+        this.loadDemoContent();
+        
+        if (this.uiManager) {
+            this.uiManager.showStatusMessage('Demo content loaded', 'success');
+        }
     }
 }
 
-// Initialize the application when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    // Add a small delay to ensure all scripts are loaded
-    setTimeout(() => {
-        try {
-            // Make sure all required classes are available
-            const requiredClasses = ['CueManager', 'AudioEngine', 'VideoEngine', 'UIManager'];
-            const missingClasses = requiredClasses.filter(className => typeof window[className] === 'undefined');
-            
-            if (missingClasses.length > 0) {
-                console.error('Required classes not loaded:', missingClasses);
-                document.body.innerHTML = `
-                    <div style="padding: 40px; text-align: center; color: #dc3545; background: #1a1a1a; min-height: 100vh;">
-                        <h2>CueForge - Loading Error</h2>
-                        <p>Missing required classes: ${missingClasses.join(', ')}</p>
-                        <p>Please check that all JavaScript files are loaded correctly.</p>
-                        <button onclick="location.reload()" style="
-                            background: #28a745; border: none; color: white; 
-                            padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 20px;
-                        ">Reload Page</button>
-                    </div>
-                `;
-                return;
-            }
-            
-            console.log('All required classes loaded successfully');
-            
-            // Initialize the main application
-            window.app = new CueForgeApp();
-            
-            // Expose app globally for debugging
-            window.qlabClone = window.app;
-            
-            // Development helpers
-            window.debug = {
-                cueManager: () => window.app.getCueManager(),
-                audioEngine: () => window.app.getAudioEngine(),
-                videoEngine: () => window.app.getVideoEngine(),
-                uiManager: () => window.app.getUIManager(),
-                displayManager: () => window.app.getDisplayManager(),
-                addTestCue: (type, options) => {
-                    if (type === 'audio') return window.app.addTestAudioCue(options?.name);
-                    if (type === 'video') return window.app.addTestVideoCue(options?.name);
-                    if (type === 'wait') return window.app.addTestWaitCue(options?.duration, options?.name);
-                    return window.app.getCueManager().addCue(type, options);
-                },
-                exportShow: () => window.app.exportShow(),
-                stats: () => window.app.getCueManager().getCueStats(),
-                status: () => window.app.getStatus(),
-                go: () => window.app.getCueManager().go(),
-                stop: () => window.app.getCueManager().stop(),
-                pause: () => window.app.getCueManager().pause()
-            };
-            
-            console.log('Debug helpers available via window.debug');
-            console.log('Try: debug.addTestCue("audio", {name: "My Test Audio"})');
-            
-        } catch (error) {
-            console.error('Failed to initialize application:', error);
-            document.body.innerHTML = `
-                <div style="padding: 40px; text-align: center; color: #dc3545; background: #1a1a1a; min-height: 100vh;">
-                    <h2>CueForge - Initialization Error</h2>
-                    <p>${error.message}</p>
-                    <button onclick="location.reload()" style="
-                        background: #28a745; border: none; color: white; 
-                        padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-top: 20px;
-                    ">Reload Page</button>
-                </div>
-            `;
+// Console utilities for debugging and testing
+window.CueForgeDebug = {
+    getStats: () => window.app?.getStats(),
+    addTestCues: () => window.app?.addTargetingTestCues(),
+    exportShow: () => window.app?.exportShow(),
+    resetDemo: () => window.app?.resetToDemo(),
+    
+    // Targeting system utilities
+    showBrokenCues: () => {
+        if (!window.cueManager) return [];
+        return window.cueManager.cues.filter(c => c.isBroken);
+    },
+    
+    showTargetingInfo: () => {
+        if (!window.cueManager) return {};
+        const cues = window.cueManager.cues;
+        return {
+            total: cues.length,
+            withTargets: cues.filter(c => c.target).length,
+            broken: cues.filter(c => c.isBroken).length,
+            fileTargets: cues.filter(c => c.targetType === 'file').length,
+            cueTargets: cues.filter(c => c.targetType === 'cue').length,
+            controlCues: cues.filter(c => ['start', 'stop', 'goto', 'fade'].includes(c.type)).length
+        };
+    },
+    
+    testControlCue: (cueNumber) => {
+        if (!window.cueManager) return false;
+        const cue = window.cueManager.cues.find(c => c.number === cueNumber);
+        if (cue) {
+            return window.cueManager.playCue(cue.id);
         }
-        
-    }, 100); // Small delay to ensure all scripts are loaded
-});
-
-// Handle app focus/blur for audio context management
-document.addEventListener('visibilitychange', () => {
-    if (window.app && window.app.audioEngine && window.app.audioEngine.ensureAudioContext) {
-        if (document.hidden) {
-            console.log('App hidden');
-        } else {
-            console.log('App visible');
-            window.app.audioEngine.ensureAudioContext().catch(console.error);
-        }
+        return false;
     }
-});
+};
+
+// Initialize the application
+const app = new CueForgeApp();
+
+// Export for debugging
+window.CueForgeApp = CueForgeApp;

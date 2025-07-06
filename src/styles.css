@@ -122,7 +122,7 @@ body {
     transform: translateY(1px);
 }
 
-/* 🔧 FIX: Enhanced transport button disabled states */
+/* Enhanced transport button disabled states */
 .transport-btn:disabled {
     opacity: 0.3 !important;
     cursor: not-allowed !important;
@@ -136,7 +136,7 @@ body {
     opacity: 1;
 }
 
-/* 🔧 FIX: Enhanced GO button states */
+/* Enhanced GO button states */
 .go-btn {
     background: #28a745;
     border-color: #1e7e34;
@@ -175,7 +175,7 @@ body {
     }
 }
 
-/* 🔧 FIX: Enhanced stop button states */
+/* Enhanced stop button states */
 .stop-btn:not(:disabled) {
     background: #dc3545;
     border-color: #c82333;
@@ -186,7 +186,7 @@ body {
     box-shadow: 0 0 8px rgba(220, 53, 69, 0.4);
 }
 
-/* 🔧 FIX: Enhanced pause button states */
+/* Enhanced pause button states */
 .pause-btn:not(:disabled) {
     background: #ffc107;
     border-color: #e0a800;
@@ -303,7 +303,7 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     display: grid;
-    grid-template-columns: 60px 1fr 80px 100px 80px;
+    grid-template-columns: 60px 1fr 80px 100px 100px 80px;
     gap: 12px;
     color: #b0b0b0;
 }
@@ -320,35 +320,52 @@ body {
     cursor: pointer;
     transition: all 0.2s ease;
     display: grid;
-    grid-template-columns: 60px 1fr 80px 100px 80px;
+    grid-template-columns: 60px 1fr 80px 100px 100px 80px;
     align-items: center;
     gap: 12px;
     min-height: 40px;
     position: relative;
 }
 
-/* 🔧 FIX: Enhanced hover states */
+/* Enhanced hover states */
 .cue-item:hover {
     background-color: #252525;
     transform: translateX(2px);
     transition: all 0.2s ease;
 }
 
-/* 🔧 FIX: Enhanced blue selection highlight - much stronger */
+/* MAXIMUM STRENGTH BLUE SELECTION HIGHLIGHT */
 .cue-item.selected {
-    background-color: rgba(13, 115, 119, 0.6) !important; /* Increased from 0.3 to 0.6 */
-    border: 2px solid #0d7377 !important; /* Increased from 1px to 2px */
-    border-left: 4px solid #0d7377 !important; /* Increased from 3px to 4px */
-    box-shadow: 0 0 8px rgba(13, 115, 119, 0.4) !important; /* Added glow effect */
+    background-color: rgba(13, 115, 119, 0.85) !important;
+    border: 3px solid #0d7377 !important;
+    border-left: 6px solid #0d7377 !important;
+    box-shadow: 
+        0 0 12px rgba(13, 115, 119, 0.8),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 0 0 1px rgba(13, 115, 119, 0.4) !important;
     position: relative;
-    z-index: 2;
+    z-index: 10;
+    outline: 2px solid rgba(13, 115, 119, 0.6);
+    outline-offset: 1px;
 }
 
 /* Enhanced hover state for selected items */
 .cue-item.selected:hover {
-    background-color: rgba(13, 115, 119, 0.7) !important;
-    box-shadow: 0 0 12px rgba(13, 115, 119, 0.6) !important;
-    transform: translateX(4px);
+    background-color: rgba(13, 115, 119, 0.95) !important;
+    box-shadow: 
+        0 0 20px rgba(13, 115, 119, 1.0),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        0 0 0 2px rgba(13, 115, 119, 0.6) !important;
+    transform: translateX(6px);
+    outline: 3px solid rgba(13, 115, 119, 0.8);
+}
+
+/* Ensure selected state persists over other states */
+.cue-item.selected.current,
+.cue-item.selected.playing,
+.cue-item.selected.loading {
+    background-color: rgba(13, 115, 119, 0.85) !important;
+    border-left: 6px solid #0d7377 !important;
 }
 
 .cue-item.current {
@@ -376,44 +393,51 @@ body {
 
 /* ==================== ENHANCED PLAYHEAD INDICATOR STYLES ==================== */
 
-/* 🔧 FIX: Enhanced playhead indicator */
+/* Enhanced playhead indicator */
 .cue-item.standing-by {
-    border-left: 4px solid #28a745 !important; /* Increased from 3px */
+    border-left: 5px solid #28a745 !important;
     background: linear-gradient(90deg, 
-        rgba(40, 167, 69, 0.25) 0%, 
-        rgba(40, 167, 69, 0.1) 60%, 
+        rgba(40, 167, 69, 0.3) 0%, 
+        rgba(40, 167, 69, 0.15) 60%, 
         transparent 100%) !important;
-    box-shadow: 0 0 6px rgba(40, 167, 69, 0.3) !important; /* Added glow */
+    box-shadow: 0 0 10px rgba(40, 167, 69, 0.5) !important;
 }
 
 .cue-item.standing-by .cue-number {
     color: #28a745 !important;
     font-weight: bold !important;
-    text-shadow: 0 0 4px rgba(40, 167, 69, 0.5) !important; /* Added glow to text */
+    text-shadow: 0 0 6px rgba(40, 167, 69, 0.8) !important;
     animation: playhead-pulse 2s ease-in-out infinite;
 }
 
-/* 🔧 FIX: Better visual separation between states */
+/* Better visual separation between states */
 .cue-item.selected.standing-by {
-    /* When both selected AND standing by */
-    border-left: 4px solid #28a745 !important; /* Green takes priority for playhead */
+    /* When both selected AND standing by - blue selection wins */
+    border-left: 6px solid #0d7377 !important;
     background: linear-gradient(90deg, 
         rgba(40, 167, 69, 0.2) 0%, 
-        rgba(13, 115, 119, 0.6) 30%, 
-        rgba(13, 115, 119, 0.6) 100%) !important;
-    box-shadow: 0 0 8px rgba(13, 115, 119, 0.4), 0 0 4px rgba(40, 167, 69, 0.3) !important;
+        rgba(13, 115, 119, 0.85) 20%, 
+        rgba(13, 115, 119, 0.85) 100%) !important;
+    box-shadow: 
+        0 0 12px rgba(13, 115, 119, 0.8),
+        0 0 6px rgba(40, 167, 69, 0.4) !important;
+}
+
+.cue-item.selected.standing-by .cue-number {
+    color: #0d7377 !important;
+    text-shadow: 0 0 6px rgba(13, 115, 119, 0.8) !important;
 }
 
 .cue-item.standing-by:hover {
     background: linear-gradient(90deg, 
-        rgba(40, 167, 69, 0.35) 0%, 
+        rgba(40, 167, 69, 0.4) 0%, 
         rgba(255, 255, 255, 0.05) 60%) !important;
     transform: translateX(4px);
 }
 
 .cue-item.standing-by {
     position: relative;
-    z-index: 1;
+    z-index: 5;
 }
 
 @keyframes playhead-pulse {
@@ -426,30 +450,32 @@ body {
     50% { opacity: 0.8; }
 }
 
-/* 🔧 FIX: Enhanced selection visibility in different states */
+/* Enhanced selection visibility in different states */
 .cue-item.playing.selected {
     background: linear-gradient(90deg, 
         rgba(40, 167, 69, 0.3) 0%, 
-        rgba(13, 115, 119, 0.6) 30%, 
-        rgba(13, 115, 119, 0.6) 100%) !important;
-    border-left: 4px solid #28a745 !important;
-    box-shadow: 0 0 8px rgba(13, 115, 119, 0.4), 0 0 4px rgba(40, 167, 69, 0.3) !important;
+        rgba(13, 115, 119, 0.85) 30%, 
+        rgba(13, 115, 119, 0.85) 100%) !important;
+    border-left: 6px solid #0d7377 !important;
+    box-shadow: 
+        0 0 12px rgba(13, 115, 119, 0.8),
+        0 0 6px rgba(40, 167, 69, 0.4) !important;
 }
 
 .cue-item.executing.selected {
     background: linear-gradient(90deg, 
         rgba(255, 193, 7, 0.3) 0%, 
-        rgba(13, 115, 119, 0.6) 30%, 
-        rgba(13, 115, 119, 0.6) 100%) !important;
+        rgba(13, 115, 119, 0.85) 30%, 
+        rgba(13, 115, 119, 0.85) 100%) !important;
     animation: executing-pulse 1s ease-in-out infinite, selection-highlight 0.5s ease-in-out;
 }
 
 @keyframes selection-highlight {
     0% { 
-        box-shadow: 0 0 8px rgba(13, 115, 119, 0.4);
+        box-shadow: 0 0 12px rgba(13, 115, 119, 0.8);
     }
     100% { 
-        box-shadow: 0 0 16px rgba(13, 115, 119, 0.8);
+        box-shadow: 0 0 20px rgba(13, 115, 119, 1.0);
     }
 }
 
@@ -508,6 +534,292 @@ body {
 
 .cue-status.loading {
     color: #17a2b8;
+}
+
+/* ==================== TARGET COLUMN & BROKEN CUES ==================== */
+
+.cue-target {
+    color: #b0b0b0;
+    font-size: 12px;
+    font-family: monospace;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+}
+
+.cue-target:hover {
+    background: #333;
+    color: #ffffff;
+}
+
+.cue-target.missing {
+    color: #dc3545;
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.cue-target.file-target {
+    color: #17a2b8;
+}
+
+.cue-target.cue-target {
+    color: #ffc107;
+}
+
+.cue-target.empty {
+    color: #6c757d;
+    opacity: 0.7;
+}
+
+/* Broken cue styling */
+.cue-item.broken {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+    border-left: 4px solid #dc3545 !important;
+    box-shadow: 0 0 4px rgba(220, 53, 69, 0.3) !important;
+}
+
+.cue-item.broken .cue-number {
+    color: #dc3545 !important;
+    font-weight: bold !important;
+}
+
+.cue-item.broken .cue-name {
+    color: #dc3545 !important;
+    opacity: 0.8;
+}
+
+/* Broken cue takes priority over selection but not playhead */
+.cue-item.broken.selected {
+    background: linear-gradient(90deg, 
+        rgba(220, 53, 69, 0.2) 0%, 
+        rgba(13, 115, 119, 0.85) 30%, 
+        rgba(13, 115, 119, 0.85) 100%) !important;
+    border-left: 6px solid #dc3545 !important;
+    box-shadow: 
+        0 0 8px rgba(220, 53, 69, 0.5),
+        0 0 4px rgba(13, 115, 119, 0.4) !important;
+}
+
+/* Control cue type indicators */
+.cue-type.control-cue {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.cue-type.media-cue {
+    color: #17a2b8;
+    font-weight: bold;
+}
+
+/* ==================== ENHANCED CUE CONTROLS ==================== */
+
+.cue-controls {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.cue-controls .btn-small {
+    font-size: 11px;
+    padding: 4px 8px;
+}
+
+/* ==================== TARGET SELECTION MODALS ==================== */
+
+.target-modal-content {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.target-cue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.target-cue-item {
+    padding: 8px 12px;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.target-cue-item:hover {
+    background: #404040;
+    border-color: #666;
+}
+
+.target-cue-item.selected {
+    background: #0d7377;
+    border-color: #0d7377;
+    color: #ffffff;
+}
+
+.target-cue-info {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.target-cue-number {
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 30px;
+}
+
+.target-cue-name {
+    flex: 1;
+}
+
+.target-cue-type {
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+}
+
+/* ==================== FILE DROP ZONE ==================== */
+
+.file-target-section {
+    margin-bottom: 20px;
+}
+
+.file-drop-zone {
+    border: 2px dashed #555;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    background: #2a2a2a;
+    transition: all 0.3s ease;
+    margin-bottom: 16px;
+}
+
+.file-drop-zone:hover,
+.file-drop-zone.dragover {
+    border-color: #0d7377;
+    background: rgba(13, 115, 119, 0.1);
+}
+
+.drop-zone-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.drop-zone-icon {
+    font-size: 48px;
+    opacity: 0.6;
+}
+
+.drop-zone-text p {
+    margin: 0;
+    font-size: 16px;
+    color: #e0e0e0;
+}
+
+.drop-zone-text small {
+    color: #888;
+    font-size: 12px;
+}
+
+/* File info display */
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #333;
+    border-radius: 6px;
+    border: 1px solid #555;
+}
+
+.file-icon {
+    font-size: 24px;
+}
+
+.file-details {
+    flex: 1;
+}
+
+.file-name {
+    font-weight: 500;
+    color: #ffffff;
+    margin-bottom: 4px;
+}
+
+.file-size {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 2px;
+}
+
+.file-path {
+    font-size: 11px;
+    color: #666;
+    font-family: monospace;
+    word-break: break-all;
+}
+
+/* ==================== INSPECTOR ENHANCEMENTS ==================== */
+
+.inspector-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.target-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.target-display {
+    flex: 1;
+    background: #333;
+    border: 1px solid #555;
+    color: #ffffff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.target-display:hover {
+    background: #404040;
+    border-color: #666;
+}
+
+.target-display.empty {
+    color: #888;
+    font-style: italic;
+}
+
+.target-display.broken {
+    color: #dc3545;
+    border-color: #dc3545;
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.target-actions {
+    display: flex;
+    gap: 4px;
+}
+
+/* ==================== STATUS BAR ENHANCEMENTS ==================== */
+
+#broken-cue-count {
+    color: #dc3545;
+    font-weight: 500;
+}
+
+#broken-cue-count:before {
+    content: '⚠ ';
 }
 
 /* ==================== INSPECTOR SECTION ==================== */
@@ -701,7 +1013,7 @@ body {
     margin: 0;
 }
 
-/* 🔧 FIX: Enhanced modal close button */
+/* Enhanced modal close button */
 .modal-close {
     background: none;
     border: none;
@@ -833,6 +1145,7 @@ input, select, textarea, button {
 
 input[type="range"] {
     -webkit-appearance: none;
+    appearance: none;
     height: 4px;
     background: #555;
     border-radius: 2px;
@@ -841,6 +1154,7 @@ input[type="range"] {
 
 input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
+    appearance: none;
     width: 16px;
     height: 16px;
     background: #0d7377;
@@ -859,7 +1173,6 @@ input[type="range"]::-moz-range-thumb {
 
 input[type="checkbox"] {
     -webkit-appearance: none;
-    -moz-appearance: none;
     appearance: none;
     width: 16px;
     height: 16px;
@@ -878,27 +1191,11 @@ input[type="checkbox"]:checked {
 input[type="checkbox"]:checked::after {
     content: '✓';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
+    top: -2px;
+    left: 2px;
+    color: #ffffff;
     font-size: 12px;
     font-weight: bold;
-}
-
-/* ==================== STATUS MESSAGES ==================== */
-
-/* 🔧 FIX: Emergency stop visual feedback */
-.status-message.status-warning {
-    background: #ffc107 !important;
-    color: #000 !important;
-    font-weight: bold;
-    animation: emergency-flash 0.5s ease-in-out 3;
-}
-
-@keyframes emergency-flash {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
 }
 
 /* ==================== SCROLLBARS ==================== */
@@ -921,43 +1218,9 @@ input[type="checkbox"]:checked::after {
     background: #666;
 }
 
-/* ==================== UTILITIES ==================== */
+/* ==================== ACCESSIBILITY & RESPONSIVE ==================== */
 
-.text-center {
-    text-align: center;
-}
-
-.text-left {
-    text-align: left;
-}
-
-.text-right {
-    text-align: right;
-}
-
-.mb-0 { margin-bottom: 0; }
-.mb-1 { margin-bottom: 4px; }
-.mb-2 { margin-bottom: 8px; }
-.mb-3 { margin-bottom: 12px; }
-.mb-4 { margin-bottom: 16px; }
-
-.mt-0 { margin-top: 0; }
-.mt-1 { margin-top: 4px; }
-.mt-2 { margin-top: 8px; }
-.mt-3 { margin-top: 12px; }
-.mt-4 { margin-top: 16px; }
-
-.hidden {
-    display: none;
-}
-
-.visible {
-    display: block;
-}
-
-/* ==================== RESPONSIVE DESIGN ==================== */
-
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
     .main-content {
         flex-direction: column;
     }
@@ -966,30 +1229,41 @@ input[type="checkbox"]:checked::after {
     .inspector-section,
     .video-preview-section {
         width: 100%;
+        max-height: 50vh;
     }
     
-    .inspector-section {
-        max-height: 300px;
-    }
-}
-
-@media (max-width: 768px) {
     .header {
         flex-direction: column;
         gap: 12px;
-        padding: 12px;
+    }
+}
+
+/* Focus indicators for accessibility */
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid #0d7377;
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .cue-item.selected {
+        background-color: rgba(13, 115, 119, 1.0) !important;
+        border-left: 8px solid #0d7377 !important;
+    }
+}
+
+/* Print styles */
+@media print {
+    body {
+        background: white;
+        color: black;
     }
     
+    .modal,
     .transport-controls {
-        order: -1;
-    }
-    
-    .cue-controls {
-        flex-wrap: wrap;
-    }
-    
-    .btn-small {
-        font-size: 11px;
-        padding: 4px 8px;
+        display: none;
     }
 }
