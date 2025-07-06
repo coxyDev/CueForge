@@ -13,6 +13,9 @@ class UIManager {
         
         // Check API availability first
         this.checkAPIAvailability();
+
+        // Check if styles loaded
+        this.ensureStylesLoaded();
         
         this.initializeElements();
         this.bindEvents();
@@ -315,7 +318,7 @@ class UIManager {
             displayRouting: document.getElementById('display-routing')
         };
 
-        ensureStylesLoaded() {
+   ensureStylesLoaded() {
     // Check if our main styles are loaded by testing for a specific CSS property
     const testElement = document.createElement('div');
     testElement.className = 'cue-item';
@@ -334,6 +337,7 @@ class UIManager {
     }
 }
 
+// Add the showStylesError method if it doesn't exist
 showStylesError() {
     const errorDiv = document.createElement('div');
     errorDiv.style.cssText = `
@@ -370,7 +374,7 @@ showStylesError() {
     
     document.body.appendChild(errorDiv);
 }
-    }
+}
 
     bindEvents() {
         // Transport controls
@@ -605,17 +609,14 @@ showStylesError() {
         this.cueManager.goToCue(cue.id);
     });
     
+    // FIXED: Single context menu event listener
     element.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        // Future: context menu
-
-      // Keep existing right-click for future context menu
-    element.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
+        // Future: context menu implementation
     });
     
     return element;
-},
+}
 
     selectNextCue() {
         const cues = this.cueManager.cues;
