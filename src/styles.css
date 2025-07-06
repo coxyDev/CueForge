@@ -1267,3 +1267,94 @@ textarea:focus {
         display: none;
     }
 }
+
+/* Status Message Animations */
+@keyframes slideInDown {
+    from {
+        transform: translateX(-50%) translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutUp {
+    from {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(-50%) translateY(-100%);
+        opacity: 0;
+    }
+}
+
+/* Drag and Drop Animations */
+@keyframes dragPulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(13, 115, 119, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(13, 115, 119, 0);
+    }
+}
+
+.cue-item.dragging {
+    animation: dragPulse 1s infinite;
+}
+
+/* Selection Animation */
+@keyframes selectionFlash {
+    0% {
+        background-color: rgba(13, 115, 119, 0.1);
+    }
+    50% {
+        background-color: rgba(13, 115, 119, 0.3);
+    }
+    100% {
+        background-color: rgba(13, 115, 119, 0.2);
+    }
+}
+
+.cue-item.selected {
+    animation: selectionFlash 0.3s ease-out;
+}
+
+/* Group Expansion Animation */
+.group-toggle {
+    transition: transform 0.2s ease-in-out;
+}
+
+.group-toggle:hover {
+    transform: scale(1.1);
+}
+
+/* Button State Transitions */
+.btn-small {
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-small:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-small:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.group-from-selection {
+    animation: groupReady 0.5s ease-in-out;
+}
+
+@keyframes groupReady {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}

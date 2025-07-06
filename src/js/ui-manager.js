@@ -1291,6 +1291,12 @@ class UIManager {
                 this.closeFileTargetModal();
                 return;
             }
+
+            if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+                e.preventDefault();
+                this.goToSelectedCue();  // <- This line should call the new method
+                return;
+            }
             
             if (this.isInputFocused(e.target)) {
                 return;
@@ -1678,6 +1684,315 @@ class UIManager {
             settingsModal.classList.remove('show');
         }
     }
+
+    setupDragAndDrop() {
+    // Global drag event handlers for cleanup
+    document.addEventListener('dragend', () => {
+        this.cleanupDrag();
+    });
+    
+    document.addEventListener('dragstart', (e) => {
+        // Only handle our cue drag events
+        if (!e.target.closest('.cue-item')) {
+            e.preventDefault();
+        }
+    });
+    
+    console.log('✅ Drag and drop system initialized');
+}
+
+/**
+ * Enhanced visual feedback for drag operations
+ */
+showDragFeedback(cues) {
+    const count = cues.length;
+    
+    // Add visual feedback to all selected cues
+    cues.forEach(cue => {
+        const element = document.querySelector(`[data-cue-id="${cue.id}"]`);
+        if (element) {
+            element.classList.add('dragging');
+        }
+    });
+    
+    // Show drag count if multiple cues
+    if (count > 1) {
+        const dragIndicator = document.createElement('div');
+        dragIndicator.className = 'drag-count-indicator';
+        dragIndicator.textContent = `${count} cues`;
+        dragIndicator.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #0d7377;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 2000;
+            pointer-events: none;
+        `;
+        document.body.appendChild(dragIndicator);
+        
+        // Auto-remove after a delay
+        setTimeout(() => {
+            if (document.body.contains(dragIndicator)) {
+                document.body.removeChild(dragIndicator);
+            }
+        }, 3000);
+    }
+}
+
+/**
+ * Enhanced cleanup for drag operations
+ */
+cleanupDrag() {
+    if (!this.isDragging) return;
+    
+    this.isDragging = false;
+    this.draggedCue = null;
+    this.draggedCues = [];
+    
+    // Remove visual indicators
+    document.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+    document.querySelectorAll('.drag-count-indicator').forEach(el => el.remove());
+    
+    // Reset opacity and classes
+    document.querySelectorAll('.cue-item').forEach(el => {
+        el.style.opacity = '';
+        el.classList.remove('dragging');
+    });
+    
+    console.log('Drag operation cleaned up');
+}
+
+/**
+ * Show status messages to user
+ */
+showStatusMessage(message, type = 'info', duration = 3000) {
+    // Remove any existing status messages
+    const existing = document.querySelector('.status-message');
+    if (existing) {
+        existing.remove();
+    }
+    
+    const statusElement = document.createElement('div');
+    statusElement.className = `status-message status-${type}`;
+    statusElement.textContent = message;
+    statusElement.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${type === 'success' ? '#28a745' : type === 'warning' ? '#ffc107' : type === 'error' ? '#dc3545' : '#17a2b8'};
+        color: ${type === 'warning' ? '#212529' : 'white'};
+        padding: 12px 20px;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+        z-index: 2000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: slideInDown 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(statusElement);
+    
+    // Auto-remove after duration
+    setTimeout(() => {
+        if (document.body.contains(statusElement)) {
+            statusElement.style.animation = 'slideOutUp 0.3s ease-in';
+            setTimeout(() => {
+                if (document.body.contains(statusElement)) {
+                    document.body.removeChild(statusElement);
+                }
+            }, 300);
+        }
+    }, duration);
+}
+
+/**
+ * Complete the selectPreviousCue method
+ */
+selectPreviousCue() {
+    const cues = this.cueManager.cues;
+    if (cues.length === 0) return;
+    
+    const selectedCues = this.cueManager.getSelectedCues();
+    const primaryCue = selectedCues[0];
+    let newIndex = cues.length - 1; // Default to last cue
+    
+    if (primaryCue) {
+        const currentIndex = this.cueManager.getCueIndex(primaryCue.id);
+        newIndex = Math.max(0, currentIndex - 1);
+    }
+    
+    this.cueManager.selectCue(cues[newIndex].id);
+    this.lastClickedCueId = cues[newIndex].id;
+}
+
+/**
+ * Go to selected cue (for Enter key)
+ */
+goToSelectedCue() {
+    const selectedCues = this.cueManager.getSelectedCues();
+    if (selectedCues.length === 1) {
+        this.cueManager.goToCue(selectedCues[0].id);
+    } else if (selectedCues.length === 0) {
+        // No selection, use GO button behavior
+        this.cueManager.go();
+    }
+}
+
+/**
+ * Enhanced updateGroupButtonState with visual feedback
+ */
+updateGroupButtonState() {
+    const selectedCues = this.cueManager.getSelectedCues();
+    
+    if (this.elements.addGroupCue) {
+        if (selectedCues.length >= 2) {
+            this.elements.addGroupCue.textContent = `📁 Group (${selectedCues.length})`;
+            this.elements.addGroupCue.title = `Create group from ${selectedCues.length} selected cues`;
+            this.elements.addGroupCue.classList.add('group-from-selection');
+        } else {
+            this.elements.addGroupCue.textContent = '📁 Group';
+            this.elements.addGroupCue.title = 'Add Group Cue';
+            this.elements.addGroupCue.classList.remove('group-from-selection');
+        }
+    }
+}
+
+/**
+ * Update cue count display with broken cue information
+ */
+updateCueCount() {
+    const totalCues = this.cueManager.cues.length;
+    const brokenCues = this.cueManager.getBrokenCueCount();
+    
+    if (this.elements.cueCount) {
+        this.elements.cueCount.textContent = `${totalCues} cue${totalCues !== 1 ? 's' : ''}`;
+    }
+    
+    if (this.elements.brokenCueCount) {
+        if (brokenCues > 0) {
+            this.elements.brokenCueCount.textContent = `${brokenCues} broken`;
+            this.elements.brokenCueCount.style.display = 'block';
+            this.elements.brokenCueCount.style.color = '#dc3545';
+        } else {
+            this.elements.brokenCueCount.style.display = 'none';
+        }
+    }
+}
+
+/**
+ * Enhanced createCueElement with complete group support
+ */
+createCueElement(cue, index) {
+    const element = document.createElement('div');
+    element.className = 'cue-item';
+    element.dataset.cueId = cue.id;
+    element.dataset.index = index;
+
+    // Apply state classes
+    const standByCue = this.cueManager.getStandByCue();
+    const isSelected = this.cueManager.isCueSelected(cue.id);
+    
+    if (isSelected) {
+        element.classList.add('selected');
+    }
+    
+    if (standByCue && standByCue.id === cue.id) {
+        element.classList.add('standing-by');
+    }
+    
+    if (cue.isBroken) {
+        element.classList.add('broken');
+    }
+    
+    if (cue.status === 'playing') {
+        element.classList.add('playing');
+    } else if (cue.status === 'paused') {
+        element.classList.add('paused');
+    } else if (cue.status === 'loading') {
+        element.classList.add('loading');
+    }
+    
+    if (cue.autoContinue) {
+        element.classList.add('auto-continue');
+    }
+
+    // Special styling for group children
+    if (cue.isGroupChild) {
+        element.classList.add('group-child');
+    }
+
+    // Make element draggable
+    element.draggable = true;
+
+    // Enhanced playhead indicator
+    const playheadIndicator = (standByCue && standByCue.id === cue.id) ? '▶ ' : '';
+    
+    // Group expansion indicator and child count
+    let groupIndicator = '';
+    if (cue.type === 'group') {
+        const isExpanded = this.cueManager.isGroupExpanded(cue.id);
+        const childCount = cue.children ? cue.children.length : 0;
+        const expandIcon = isExpanded ? '▼' : '▶';
+        groupIndicator = `<span class="group-toggle" data-group-id="${cue.id}" title="${isExpanded ? 'Collapse' : 'Expand'} group (${childCount} cues)">${expandIcon} [${childCount}]</span>`;
+    }
+    
+    // Target display
+    const targetDisplay = cue.requiresTarget ? 
+        (this.cueManager.getTargetDisplayText ? this.cueManager.getTargetDisplayText(cue) : '?') : 
+        '';
+    
+    // Display number (could be nested like "3.1" for group children)
+    const displayNumber = cue.displayNumber || cue.number;
+    
+    // Type icon mapping
+    const typeIcons = {
+        'audio': '🔊',
+        'video': '📹',
+        'wait': '⏱',
+        'group': '📁',
+        'start': '▶',
+        'stop': '⏹',
+        'fade': '📉',
+        'goto': '🎯'
+    };
+    
+    const typeIcon = typeIcons[cue.type] || '❓';
+    const cueTypeClass = cue.isBroken ? 'broken' : '';
+    const indentClass = cue.isGroupChild ? 'group-child-indent' : '';
+    
+    element.innerHTML = `
+        <div class="cue-number ${indentClass}">${playheadIndicator}${displayNumber}${cue.autoContinue ? ' →' : ''} ${groupIndicator}</div>
+        <div class="cue-name">${cue.name}</div>
+        <div class="cue-type ${cueTypeClass}" title="${cue.type}">${typeIcon}</div>
+        <div class="cue-target">${targetDisplay}</div>
+        <div class="cue-duration">${this.formatDuration(cue.duration)}</div>
+        <div class="cue-status ${cue.status}">${cue.status}</div>
+    `;
+    
+    // Bind event handlers
+    this.bindCueElementEvents(element, cue);
+    
+    return element;
+}
+
+/**
+ * Format duration for display
+ */
+formatDuration(duration) {
+    if (!duration || duration === 0) return '--:--';
+    
+    const seconds = Math.floor(duration / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
 }
 
 // Export for use in other modules

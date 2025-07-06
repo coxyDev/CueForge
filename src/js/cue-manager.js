@@ -1385,6 +1385,160 @@ class CueManager {
         
         return stats;
     }
+    
+createGroupFromSelection(groupOptions = {}) {
+    const selectedCues = this.getSelectedCues();
+    
+    if (selectedCues.length < 2) {
+        console.warn('Need at least 2 cues selected to create a group');
+        return null;
+    }
+
+    // Sort selected cues by their current order in the cue list
+    selectedCues.sort((a, b) => this.getCueIndex(a.id) - this.getCueIndex(b.id));
+    
+    // Find the position to insert the group (where the first selected cue is)
+    const insertIndex = this.getCueIndex(selectedCues[0].id);
+    
+    // Create the group cue
+    const groupCue = this.createCue('group', {
+        name: groupOptions.name || `Group ${this.getNextCueNumber()}`,
+        mode: groupOptions.mode || 'playlist',
+        children: []
+    });
+    
+    // Remove selected cues from main list (in reverse order to maintain indices)
+    const cueIndices = selectedCues
+        .map(cue => ({ cue, index: this.getCueIndex(cue.id) }))
+        .sort((a, b) => b.index - a.index);
+    
+    cueIndices.forEach(({ cue, index }) => {
+        this.cues.splice(index, 1);
+        // Renumber the child for group context
+        cue.number = groupCue.children.length + 1;
+        groupCue.children.push(cue);
+    });
+    
+    // Insert group at the position of the first selected cue
+    this.cues.splice(insertIndex, 0, groupCue);
+    
+    // Renumber all cues
+    this.renumberAllCues();
+    
+    // Select the new group
+    this.selectCue(groupCue.id);
+    
+    this.markUnsaved();
+    this.emit('cueAdded', { cue: groupCue, index: insertIndex });
+    this.emit('selectionChanged', { 
+        selectedCueIds: [groupCue.id],
+        selectionType: 'group_created'
+    });
+    
+    console.log(`Created group ${groupCue.number} with ${groupCue.children.length} cues`);
+    return groupCue;
+}
+
+/**
+ * Get the next cue number for naming purposes
+ */
+getNextCueNumber() {
+    if (this.cues.length === 0) return 1;
+    const maxNumber = Math.max(...this.cues.map(c => parseInt(c.number) || 0));
+    return maxNumber + 1;
+}
+
+/**
+ * Enhanced removeCue method to handle group children
+ */
+removeCue(cueId) {
+    const cue = this.getCue(cueId);
+    if (!cue) return false;
+
+    const index = this.getCueIndex(cueId);
+    if (index === -1) return false;
+
+    // If removing a group with children, ask what to do with children
+    if (cue.type === 'group' && cue.children && cue.children.length > 0) {
+        // In a real implementation, you might want to show a dialog
+        // For now, we'll move children back to main list
+        this.ungroupCues(cueId);
+        return true;
+    }
+
+    // Remove from main cue list
+    this.cues.splice(index, 1);
+    
+    // Remove from selection if selected
+    this.selectedCueIds.delete(cueId);
+    
+    // Clear standby if this was the standby cue
+    if (this.standByCueId === cueId) {
+        this.standByCueId = null;
+    }
+    
+    // Remove from expanded groups
+    this.expandedGroups.delete(cueId);
+    
+    // Renumber remaining cues
+    this.renumberAllCues();
+    
+    this.markUnsaved();
+    this.emit('cueRemoved', { cue, index });
+    this.emit('selectionChanged', { 
+        selectedCueIds: Array.from(this.selectedCueIds),
+        selectionType: 'removed'
+    });
+    
+    return true;
+}
+
+/**
+ * Check if cue list has any broken cues
+ */
+getBrokenCueCount() {
+    return this.cues.filter(cue => cue.isBroken).length;
+}
+
+/**
+ * Advanced cue finding methods
+ */
+findCuesByType(type) {
+    return this.cues.filter(cue => cue.type === type);
+}
+
+findCuesByName(name) {
+    return this.cues.filter(cue => 
+        cue.name.toLowerCase().includes(name.toLowerCase())
+    );
+}
+
+/**
+ * Group utility methods
+ */
+getAllGroupCues() {
+    return this.cues.filter(cue => cue.type === 'group');
+}
+
+getChildrenOfGroup(groupId) {
+    const group = this.getCue(groupId);
+    return group && group.type === 'group' ? group.children || [] : [];
+}
+
+/**
+ * Selection utility methods
+ */
+getSelectedCueNumbers() {
+    return this.getSelectedCues().map(cue => cue.number);
+}
+
+hasSelection() {
+    return this.selectedCueIds.size > 0;
+}
+
+isMultipleSelection() {
+    return this.selectedCueIds.size > 1;
+}
 }
 
 // Utility function for generating UUIDs
