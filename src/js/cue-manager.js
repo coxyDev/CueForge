@@ -624,14 +624,30 @@ class CueManager {
                 break;
 
             case 'fade':
-                Object.assign(baseCue, {
-                    duration: 5000,
-                    targetCueId: options.targetCueId || null,
-                    fadeType: 'absolute',
-                    targetParameter: 'volume',
-                    targetValue: 0.0
-                });
-                break;
+    Object.assign(baseCue, {
+        duration: 2000, // Default 2 second fade
+        fadeMode: 'absolute', // 'absolute' or 'relative'
+        fadeCurve: 'linear', // Default curve
+        fadeParameters: [], // Will be populated when target is set
+        targetCueId: options.targetCueId || null,
+        
+        // Additional fade properties
+        fadeDirection: 'out', // 'in', 'out', 'custom'
+        fadeQuality: 'smooth', // 'smooth', 'stepped'
+        
+        // Ensure not broken if target is provided
+        isBroken: !options.targetCueId && definition.requiresTarget
+    });
+    
+    // If we have a target, set up default parameters
+    if (options.targetCueId) {
+        const targetCue = this.getCue(options.targetCueId);
+        if (targetCue) {
+            baseCue.fadeParameters = this.getDefaultFadeParameters(targetCue);
+            baseCue.isBroken = false;
+        }
+    }
+    break;
         }
 
         // Set target if provided in options
@@ -780,6 +796,45 @@ class CueManager {
             }
         });
     }
+
+    updateFadeCueTarget(fadeCueId, newTargetId) {
+    const fadeCue = this.getCue(fadeCueId);
+    const newTarget = this.getCue(newTargetId);
+    
+    if (!fadeCue || fadeCue.type !== 'fade') return;
+    
+    fadeCue.targetCueId = newTargetId;
+    
+    if (newTarget) {
+        // Reset parameters for new target
+        fadeCue.fadeParameters = this.getDefaultFadeParameters(newTarget);
+        fadeCue.isBroken = false;
+        
+        // Update fade cue name to reflect target
+        fadeCue.name = `fade ${newTarget.number}`;
+    } else {
+        fadeCue.fadeParameters = [];
+        fadeCue.isBroken = true;
+    }
+    
+    this.emit('cueUpdated', { cue: fadeCue });
+}
+
+stopFade(fadeCueId) {
+    const executionData = this.activeCues.get(fadeCueId);
+    if (executionData && executionData.type === 'fade') {
+        if (executionData.intervalId) {
+            clearInterval(executionData.intervalId);
+        }
+        
+        const fadeCue = this.getCue(fadeCueId);
+        if (fadeCue) {
+            fadeCue.status = 'loaded';
+            this.activeCues.delete(fadeCueId);
+            this.emit('cueUpdated', { cue: fadeCue });
+        }
+    }
+}
 
     // ==================== PLAYHEAD MANAGEMENT (Preserved) ====================
 
@@ -976,10 +1031,39 @@ class CueManager {
                 return false;
         }
 
+         // Handle pre-wait
+    if (cue.preWait && cue.preWait > 0) {
+        cue.status = 'waiting';
+        this.emit('cueUpdated', { cue });
+        
+        setTimeout(() => {
+            this.executeActualCue(cue);
+        }, cue.preWait);
+    } else {
+        this.executeActualCue(cue);
+    }
+
         this.currentCueIndex = this.getCueIndex(cueId);
         this.emit('playbackStateChanged', { activeCues: this.getActiveCues() });
         return true;
     }
+
+    executeActualCue(cue) {
+    cue.status = 'loading';
+    this.emit('cueUpdated', { cue });
+
+    // Execute based on cue type (your existing switch statement)
+    switch (cue.type) {
+        case 'fade':
+            this.executeFadeCue(cue);
+            break;
+        // ... all your other existing cases
+    }
+
+    this.currentCueIndex = this.getCueIndex(cue.id);
+    this.emit('playbackStateChanged', { activeCues: this.getActiveCues() });
+}
+
 
     // All execution methods remain the same...
     executeStartCue(cue) {
@@ -1257,6 +1341,11 @@ class CueManager {
     stopSpecificCue(cueId, emitEvent = true) {
         const cue = this.getCue(cueId);
         if (!cue) return;
+
+        if (cue.type === 'fade') {
+            this.stopFade(cueId);
+            return;
+        }
 
         if (this.activeCues.has(cueId)) {
             cue.status = 'loaded';

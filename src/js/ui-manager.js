@@ -306,6 +306,7 @@ class UIManager {
         this.updateInspector();
         this.updateTransportButtons();
         this.updateCueCount();
+        this.updateCueVisualState();
     }
 
     onSelectionChanged(data) {
@@ -442,6 +443,29 @@ class UIManager {
         
         return element;
     }
+
+    updateCueVisualState() {
+    // Update all cue elements with current state
+    document.querySelectorAll('.cue-item').forEach(element => {
+        const cueId = element.dataset.cueId;
+        const cue = this.cueManager.getCue(cueId);
+        
+        if (!cue) return;
+        
+        // Remove all status classes
+        element.classList.remove('playing', 'paused', 'loading', 'waiting', 'fade-active');
+        
+        // Add current status class
+        if (cue.status) {
+            element.classList.add(cue.status);
+        }
+        
+        // Special handling for fade cues
+        if (cue.type === 'fade' && cue.status === 'playing') {
+            element.classList.add('fade-active');
+        }
+    });
+}
 
     bindCueElementEvents(element, cue) {
         // Enhanced click handler for multi-selection
@@ -2259,6 +2283,18 @@ updateCueCount() {
             this.elements.brokenCueCount.style.display = 'none';
         }
     }
+}
+
+getFadeTargetDisplayText(fadeCue) {
+    if (!fadeCue.targetCueId) return '?';
+    
+    const targetCue = this.cueManager.getCue(fadeCue.targetCueId);
+    if (!targetCue) return '? (broken)';
+    
+    const paramCount = fadeCue.fadeParameters ? fadeCue.fadeParameters.length : 0;
+    const paramText = paramCount > 0 ? ` (${paramCount} param${paramCount !== 1 ? 's' : ''})` : '';
+    
+    return `${targetCue.number}${paramText}`;
 }
 
 /**
