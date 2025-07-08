@@ -924,9 +924,6 @@ stopFade(fadeCueId) {
         return this.cues.length > 0 ? this.cues[0] : null;
     }
 
-    // Preserve all other methods from the previous implementation...
-    // (go, playCue, execution methods, etc. - keeping them the same)
-
     go() {
         const now = Date.now();
         
@@ -1064,8 +1061,6 @@ stopFade(fadeCueId) {
     this.emit('playbackStateChanged', { activeCues: this.getActiveCues() });
 }
 
-
-    // All execution methods remain the same...
     executeStartCue(cue) {
         console.log(`Executing Start cue: ${cue.number}`);
         
@@ -1218,8 +1213,6 @@ stopFade(fadeCueId) {
         
         this.activeCues.set(cue.id, executionData);
         
-        // For basic implementation, just complete after 1 second
-        // In a full implementation, this would manage child cue playback
         setTimeout(() => {
             this.completeCue(cue.id);
         }, 1000);
@@ -1658,6 +1651,245 @@ hasSelection() {
 isMultipleSelection() {
     return this.selectedCueIds.size > 1;
 }
+
+updateFadeCueTarget(fadeCueId, newTargetId) {
+    const fadeCue = this.getCue(fadeCueId);
+    const newTarget = this.getCue(newTargetId);
+    
+    if (!fadeCue || fadeCue.type !== 'fade') return;
+    
+    fadeCue.targetCueId = newTargetId;
+    
+    if (newTarget) {
+        // Reset parameters for new target
+        fadeCue.fadeParameters = this.getDefaultFadeParameters(newTarget);
+        fadeCue.isBroken = false;
+        
+        // Update fade cue name to reflect target
+        fadeCue.name = `fade ${newTarget.number}`;
+    } else {
+        fadeCue.fadeParameters = [];
+        fadeCue.isBroken = true;
+    }
+    
+    this.emit('cueUpdated', { cue: fadeCue });
+}
+
+stopFade(fadeCueId) {
+    const executionData = this.activeCues.get(fadeCueId);
+    if (executionData && executionData.type === 'fade') {
+        if (executionData.intervalId) {
+            clearInterval(executionData.intervalId);
+        }
+        
+        const fadeCue = this.getCue(fadeCueId);
+        if (fadeCue) {
+            fadeCue.status = 'loaded';
+            this.activeCues.delete(fadeCueId);
+            this.emit('cueUpdated', { cue: fadeCue });
+        }
+    }
+}
+
+canFadeCueType(cueType) {
+    const fadableCueTypes = ['audio', 'video', 'group'];
+    return fadableCueTypes.includes(cueType);
+}
+
+getDefaultFadeParameters(cue) {
+    switch (cue.type) {
+        case 'audio':
+            return [
+                { name: 'volume', startValue: cue.volume || 1.0, endValue: 0.0 }
+            ];
+        case 'video':
+            return [
+                { name: 'opacity', startValue: cue.opacity || 1.0, endValue: 0.0 }
+            ];
+        case 'group':
+            return [
+                { name: 'volume', startValue: cue.volume || 1.0, endValue: 0.0 }
+            ];
+        default:
+            return [];
+    }
+}
+
+captureInitialValues(targetCue, parameters) {
+    const initialValues = {};
+    
+    parameters.forEach(param => {
+        switch (param.name) {
+            case 'volume':
+                initialValues.volume = targetCue.volume || 1.0;
+                break;
+            case 'opacity':
+                initialValues.opacity = targetCue.opacity || 1.0;
+                break;
+            case 'position':
+                initialValues.position = {
+                    x: targetCue.position?.x || 0,
+                    y: targetCue.position?.y || 0
+                };
+                break;
+            case 'scale':
+                initialValues.scale = {
+                    x: targetCue.scale?.x || 1.0,
+                    y: targetCue.scale?.y || 1.0
+                };
+                break;
+        }
+    });
+    
+    return initialValues;
+}
+
+startFadeAnimation(executionData) {
+    const { fadeConfig } = executionData;
+    const frameRate = 30; // 30 FPS for smooth fades
+    const frameInterval = 1000 / frameRate;
+    
+    const updateFade = () => {
+        const elapsed = Date.now() - fadeConfig.startTime;
+        const progress = Math.min(elapsed / fadeConfig.duration, 1.0);
+        
+        // Apply fade curve
+        const curvedProgress = this.appleFadeCurve(progress, fadeConfig.curve);
+        
+        // Update each parameter
+        fadeConfig.parameters.forEach(param => {
+            this.updateFadeParameter(fadeConfig.targetCue, param, curvedProgress, fadeConfig);
+        });
+        
+        // Emit update for target cue
+        this.emit('cueUpdated', { cue: fadeConfig.targetCue });
+        
+        // Check if fade is complete
+        if (progress >= 1.0) {
+            clearInterval(executionData.intervalId);
+            this.completeCue(fadeConfig.fadeCue.id);
+        }
+    };
+    
+    // Start animation loop
+    executionData.intervalId = setInterval(updateFade, frameInterval);
+    
+    // Run first frame immediately
+    updateFade();
+}
+
+appleFadeCurve(progress, curveType) {
+    switch (curveType) {
+        case 'linear':
+            return progress;
+            
+        case 'exponential':
+            return Math.pow(progress, 2);
+            
+        case 'logarithmic':
+            return Math.sqrt(progress);
+            
+        case 'scurve':
+            // Smooth S-curve using sine
+            return (Math.sin((progress * Math.PI) - (Math.PI / 2)) + 1) / 2;
+            
+        case 'sharp':
+            // Sharp curve - stays low then jumps up
+            return Math.pow(progress, 4);
+            
+        case 'reverse_sharp':
+            // Reverse sharp - jumps up then stays high
+            return 1 - Math.pow(1 - progress, 4);
+            
+        default:
+            return progress;
+    }
+}
+
+updateFadeParameter(targetCue, param, progress, fadeConfig) {
+    const { mode } = fadeConfig;
+    let currentValue;
+    
+    if (mode === 'absolute') {
+        // Absolute fade: interpolate between start and end values
+        currentValue = param.startValue + (param.endValue - param.startValue) * progress;
+    } else {
+        // Relative fade: modify current value by the fade amount
+        const initialValue = fadeConfig.initialValues[param.name];
+        const fadeAmount = (param.endValue - param.startValue) * progress;
+        currentValue = initialValue + fadeAmount;
+    }
+    
+    // Apply the value to the target cue
+    switch (param.name) {
+        case 'volume':
+            targetCue.volume = Math.max(0, Math.min(1, currentValue));
+            break;
+            
+        case 'opacity':
+            targetCue.opacity = Math.max(0, Math.min(1, currentValue));
+            break;
+            
+        case 'position':
+            if (!targetCue.position) targetCue.position = { x: 0, y: 0 };
+            if (param.axis === 'x') {
+                targetCue.position.x = currentValue;
+            } else if (param.axis === 'y') {
+                targetCue.position.y = currentValue;
+            }
+            break;
+            
+        case 'scale':
+            if (!targetCue.scale) targetCue.scale = { x: 1, y: 1 };
+            if (param.axis === 'x') {
+                targetCue.scale.x = Math.max(0, currentValue);
+            } else if (param.axis === 'y') {
+                targetCue.scale.y = Math.max(0, currentValue);
+            }
+            break;
+    }
+}
+
+updateFadeCueTarget(fadeCueId, newTargetId) {
+    const fadeCue = this.getCue(fadeCueId);
+    const newTarget = this.getCue(newTargetId);
+    
+    if (!fadeCue || fadeCue.type !== 'fade') return;
+    
+    fadeCue.targetCueId = newTargetId;
+    
+    if (newTarget) {
+        // Reset parameters for new target
+        fadeCue.fadeParameters = this.getDefaultFadeParameters(newTarget);
+        fadeCue.isBroken = false;
+        
+        // Update fade cue name to reflect target
+        fadeCue.name = `fade ${newTarget.number}`;
+    } else {
+        fadeCue.fadeParameters = [];
+        fadeCue.isBroken = true;
+    }
+    
+    this.emit('cueUpdated', { cue: fadeCue });
+}
+
+stopFade(fadeCueId) {
+    const executionData = this.activeCues.get(fadeCueId);
+    if (executionData && executionData.type === 'fade') {
+        if (executionData.intervalId) {
+            clearInterval(executionData.intervalId);
+        }
+        
+        const fadeCue = this.getCue(fadeCueId);
+        if (fadeCue) {
+            fadeCue.status = 'loaded';
+            this.activeCues.delete(fadeCueId);
+            this.emit('cueUpdated', { cue: fadeCue });
+        }
+    }
+}
+
+
 }
 
 // Utility function for generating UUIDs

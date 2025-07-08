@@ -1104,6 +1104,11 @@ showGroupNameDialog(defaultName, callback) {
             `;
         }
 
+        let fadeSection = '';
+        if (cue.type === 'fade') {
+            fadeSection = this.updateFadeCueInspector(cue);
+        }
+
         let groupSection = '';
         if (cue.type === 'group') {
             const childCount = cue.children ? cue.children.length : 0;
@@ -1161,6 +1166,7 @@ showGroupNameDialog(defaultName, callback) {
             
             ${targetSection}
             ${groupSection}
+            ${fadeSection}
             
             <div class="inspector-group">
                 <h3>Timing</h3>
@@ -1336,6 +1342,10 @@ showGroupNameDialog(defaultName, callback) {
                 cue.loop = e.target.checked;
                 this.cueManager.emit('cueUpdated', { cue });
             });
+        }
+
+        if (cue.type === 'fade') {
+            this.bindFadeCueEvents(cue);
         }
     }
 
@@ -2305,6 +2315,7 @@ createCueElement(cue, index) {
     element.className = 'cue-item';
     element.dataset.cueId = cue.id;
     element.dataset.index = index;
+    element.setAttribute('data-cue-type', cue.type);
 
     // Apply state classes
     const standByCue = this.cueManager.getStandByCue();
@@ -2337,6 +2348,10 @@ createCueElement(cue, index) {
     // Special styling for group children
     if (cue.isGroupChild) {
         element.classList.add('group-child');
+    }
+
+    if (cue.type === 'fade' && cue.status === 'playing') {
+        element.classList.add('fade-active');
     }
 
     // Make element draggable
