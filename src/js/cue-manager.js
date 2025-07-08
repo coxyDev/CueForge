@@ -990,43 +990,6 @@ stopFade(fadeCueId) {
         }
 
         console.log(`Playing cue: ${cue.number} - ${cue.name}`);
-        
-        cue.status = 'loading';
-        this.emit('cueUpdated', { cue });
-
-        // Execute based on cue type
-        switch (cue.type) {
-            case 'audio':
-                this.executeAudioCue(cue);
-                break;
-            case 'video':
-                this.executeVideoCue(cue);
-                break;
-            case 'wait':
-                this.executeWaitCue(cue);
-                break;
-            case 'group':
-                this.executeGroupCue(cue);
-                break;
-            case 'start':
-                this.executeStartCue(cue);
-                break;
-            case 'stop':
-                this.executeStopCue(cue);
-                break;
-            case 'pause':
-                this.executePauseCue(cue);
-                break;
-            case 'goto':
-                this.executeGoToCue(cue);
-                break;
-            case 'fade':
-                this.executeFadeCue(cue);
-                break;
-            default:
-                console.warn(`Unknown cue type: ${cue.type}`);
-                return false;
-        }
 
          // Handle pre-wait
     if (cue.preWait && cue.preWait > 0) {
@@ -1039,9 +1002,6 @@ stopFade(fadeCueId) {
     } else {
         this.executeActualCue(cue);
     }
-
-        this.currentCueIndex = this.getCueIndex(cueId);
-        this.emit('playbackStateChanged', { activeCues: this.getActiveCues() });
         return true;
     }
 
@@ -1049,16 +1009,43 @@ stopFade(fadeCueId) {
     cue.status = 'loading';
     this.emit('cueUpdated', { cue });
 
-    // Execute based on cue type (your existing switch statement)
+    // Execute based on cue type - NO PRE-WAIT HERE
     switch (cue.type) {
+        case 'audio':
+            this.executeAudioCue(cue);
+            break;
+        case 'video':
+            this.executeVideoCue(cue);
+            break;
+        case 'wait':
+            this.executeWaitCue(cue);
+            break;
+        case 'group':
+            this.executeGroupCue(cue);
+            break;
+        case 'start':
+            this.executeStartCue(cue);
+            break;
+        case 'stop':
+            this.executeStopCue(cue);
+            break;
+        case 'pause':
+            this.executePauseCue(cue);
+            break;
+        case 'goto':
+            this.executeGoToCue(cue);
+            break;
         case 'fade':
             this.executeFadeCue(cue);
             break;
-        // ... all your other existing cases
+        default:
+            console.warn(`Unknown cue type: ${cue.type}`);
+            return false;
     }
 
     this.currentCueIndex = this.getCueIndex(cue.id);
     this.emit('playbackStateChanged', { activeCues: this.getActiveCues() });
+    return true;
 }
 
     executeStartCue(cue) {
@@ -1128,29 +1115,60 @@ stopFade(fadeCueId) {
     }
 
     executeFadeCue(cue) {
-        console.log(`Executing Fade cue: ${cue.number}`);
-        
-        if (!cue.targetCueId) {
-            console.error('Fade cue has no target');
-            return;
-        }
-
-        cue.status = 'playing';
-        
-        const executionData = {
-            startTime: Date.now(),
-            type: 'fade',
-            targetCueId: cue.targetCueId
-        };
-        
-        this.activeCues.set(cue.id, executionData);
-        
-        setTimeout(() => {
-            this.completeCue(cue.id);
-        }, cue.duration);
-        
+    console.log(`Executing Fade cue: ${cue.number}`);
+    
+    if (!cue.targetCueId) {
+        console.error('Fade cue has no target');
+        cue.status = 'loaded';
         this.emit('cueUpdated', { cue });
+        return;
     }
+
+    const targetCue = this.getCue(cue.targetCueId);
+    if (!targetCue) {
+        console.error(`Fade target not found: ${cue.targetCueId}`);
+        cue.status = 'loaded';
+        this.emit('cueUpdated', { cue });
+        return;
+    }
+
+    // Check if target cue type supports fading
+    if (!this.canFadeCueType(targetCue.type)) {
+        console.error(`Cannot fade cue type: ${targetCue.type}`);
+        cue.status = 'loaded';
+        this.emit('cueUpdated', { cue });
+        return;
+    }
+
+    cue.status = 'playing';
+    
+    const fadeConfig = {
+        startTime: Date.now(),
+        duration: cue.duration || 2000, // Default 2 second fade
+        curve: cue.fadeCurve || 'linear',
+        mode: cue.fadeMode || 'absolute', // 'absolute' or 'relative'
+        parameters: cue.fadeParameters || this.getDefaultFadeParameters(targetCue),
+        targetCue: targetCue,
+        fadeCue: cue
+    };
+    
+    // Store initial values for relative fades
+    fadeConfig.initialValues = this.captureInitialValues(targetCue, fadeConfig.parameters);
+    
+    const executionData = {
+        startTime: fadeConfig.startTime,
+        type: 'fade',
+        targetCueId: cue.targetCueId,
+        fadeConfig: fadeConfig,
+        intervalId: null
+    };
+    
+    // Start the fade animation
+    this.startFadeAnimation(executionData);
+    
+    this.activeCues.set(cue.id, executionData);
+    this.emit('cueUpdated', { cue });
+}
 
     executeAudioCue(cue) {
         cue.status = 'playing';
@@ -1221,27 +1239,34 @@ stopFade(fadeCueId) {
     }
 
     completeCue(cueId) {
-        const cue = this.getCue(cueId);
-        if (!cue) return;
+    const cue = this.getCue(cueId);
+    if (!cue) return;
 
-        cue.status = 'loaded';
-        this.activeCues.delete(cueId);
-        
-        console.log(`Cue completed: ${cue.number} - ${cue.name}`);
-        
-        if (cue.autoContinue && this.autoContinueEnabled) {
-            const nextCue = this.getNextCue(cueId);
-            if (nextCue) {
-                console.log(`Auto-continuing to cue: ${nextCue.number}`);
-                setTimeout(() => {
-                    this.playCue(nextCue.id);
-                }, cue.postWait || 0);
-            }
-        }
-
-        this.emit('cueUpdated', { cue });
-        this.emit('playbackStateChanged', { activeCues: this.getActiveCues() });
+    // Clean up fade animation if this is a fade cue
+    const executionData = this.activeCues.get(cueId);
+    if (executionData && executionData.type === 'fade' && executionData.intervalId) {
+        clearInterval(executionData.intervalId);
+        console.log(`Cleaned up fade animation for cue ${cue.number}`);
     }
+
+    cue.status = 'loaded';
+    this.activeCues.delete(cueId);
+    
+    console.log(`Cue completed: ${cue.number} - ${cue.name}`);
+    
+    if (cue.autoContinue && this.autoContinueEnabled) {
+        const nextCue = this.getNextCue(cueId);
+        if (nextCue) {
+            console.log(`Auto-continuing to cue: ${nextCue.number}`);
+            setTimeout(() => {
+                this.playCue(nextCue.id);
+            }, cue.postWait || 0);
+        }
+    }
+
+    this.emit('cueUpdated', { cue });
+    this.emit('playbackStateChanged', { activeCues: this.getActiveCues() });
+}
 
     // Rest of methods remain the same (stop, pause, etc.)...
     addCue(type, options = {}, index = -1) {

@@ -536,6 +536,293 @@ class UIManager {
         element.addEventListener('drop', (e) => this.handleDrop(e));
     }
 
+    /**
+ * Enhanced fade cue inspector
+ */
+updateFadeCueInspector(cue) {
+    // Get target cue info
+    const targetCue = cue.targetCueId ? this.cueManager.getCue(cue.targetCueId) : null;
+    const availableParameters = targetCue ? this.getAvailableFadeParameters(targetCue) : [];
+    
+    const fadeSection = `
+        <div class="inspector-group">
+            <h3>Fade Configuration</h3>
+            <div class="inspector-field">
+                <label>Fade Mode</label>
+                <select id="fade-mode">
+                    <option value="absolute" ${cue.fadeMode === 'absolute' ? 'selected' : ''}>Absolute</option>
+                    <option value="relative" ${cue.fadeMode === 'relative' ? 'selected' : ''}>Relative</option>
+                </select>
+            </div>
+            <div class="inspector-field">
+                <label>Fade Curve</label>
+                <select id="fade-curve">
+                    <option value="linear" ${cue.fadeCurve === 'linear' ? 'selected' : ''}>Linear</option>
+                    <option value="exponential" ${cue.fadeCurve === 'exponential' ? 'selected' : ''}>Exponential</option>
+                    <option value="logarithmic" ${cue.fadeCurve === 'logarithmic' ? 'selected' : ''}>Logarithmic</option>
+                    <option value="scurve" ${cue.fadeCurve === 'scurve' ? 'selected' : ''}>S-Curve</option>
+                    <option value="sharp" ${cue.fadeCurve === 'sharp' ? 'selected' : ''}>Sharp</option>
+                    <option value="reverse_sharp" ${cue.fadeCurve === 'reverse_sharp' ? 'selected' : ''}>Reverse Sharp</option>
+                </select>
+            </div>
+            <div class="inspector-field">
+                <label>Fade Duration</label>
+                <input type="number" id="fade-duration" value="${(cue.duration || 2000) / 1000}" min="0.1" step="0.1"> seconds
+            </div>
+        </div>
+        
+        <div class="inspector-group">
+            <h3>Parameters to Fade</h3>
+            ${targetCue ? this.renderFadeParametersUI(cue, targetCue, availableParameters) : 
+                '<div class="inspector-field"><em>Select a target cue to configure fade parameters</em></div>'}
+        </div>
+    `;
+    
+    return fadeSection;
+}
+
+/**
+ * Get available parameters for a cue type
+ */
+getAvailableFadeParameters(targetCue) {
+    const parameters = [];
+    
+    switch (targetCue.type) {
+        case 'audio':
+            parameters.push(
+                { name: 'volume', label: 'Volume', min: 0, max: 1, step: 0.01, unit: '', default: targetCue.volume || 1.0 }
+            );
+            break;
+            
+        case 'video':
+            parameters.push(
+                { name: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.01, unit: '', default: targetCue.opacity || 1.0 },
+                { name: 'position_x', label: 'Position X', min: -1000, max: 1000, step: 1, unit: 'px', default: targetCue.position?.x || 0 },
+                { name: 'position_y', label: 'Position Y', min: -1000, max: 1000, step: 1, unit: 'px', default: targetCue.position?.y || 0 },
+                { name: 'scale_x', label: 'Scale X', min: 0, max: 5, step: 0.01, unit: '', default: targetCue.scale?.x || 1.0 },
+                { name: 'scale_y', label: 'Scale Y', min: 0, max: 5, step: 0.01, unit: '', default: targetCue.scale?.y || 1.0 }
+            );
+            break;
+            
+        case 'group':
+            parameters.push(
+                { name: 'volume', label: 'Group Volume', min: 0, max: 1, step: 0.01, unit: '', default: targetCue.volume || 1.0 }
+            );
+            break;
+    }
+    
+    return parameters;
+}
+
+/**
+ * Render fade parameters UI
+ */
+renderFadeParametersUI(fadeCue, targetCue, availableParameters) {
+    const fadeParams = fadeCue.fadeParameters || [];
+    
+    let html = `
+        <div class="fade-parameters-list">
+            <div class="fade-parameters-header">
+                <span>Parameter</span>
+                <span>Start Value</span>
+                <span>End Value</span>
+                <span>Actions</span>
+            </div>
+    `;
+    
+    // Render existing parameters
+    fadeParams.forEach((param, index) => {
+        const paramDef = availableParameters.find(p => p.name === param.name);
+        if (paramDef) {
+            html += `
+                <div class="fade-parameter-row" data-param-index="${index}">
+                    <span class="param-name">${paramDef.label}</span>
+                    <input type="number" 
+                           class="param-start-value" 
+                           value="${param.startValue}" 
+                           min="${paramDef.min}" 
+                           max="${paramDef.max}" 
+                           step="${paramDef.step}">
+                    <input type="number" 
+                           class="param-end-value" 
+                           value="${param.endValue}" 
+                           min="${paramDef.min}" 
+                           max="${paramDef.max}" 
+                           step="${paramDef.step}">
+                    <button type="button" class="btn-small btn-danger remove-param" data-param-index="${index}">Remove</button>
+                </div>
+            `;
+        }
+    });
+    
+    html += `
+        </div>
+        <div class="add-parameter-section">
+            <select id="add-parameter-select">
+                <option value="">Add Parameter...</option>
+    `;
+    
+    // Add available parameters that aren't already being faded
+    availableParameters.forEach(param => {
+        if (!fadeParams.find(fp => fp.name === param.name)) {
+            html += `<option value="${param.name}">${param.label}</option>`;
+        }
+    });
+    
+    html += `
+            </select>
+            <button type="button" id="add-parameter-btn" class="btn-small">Add Parameter</button>
+        </div>
+        
+        <div class="fade-parameter-presets">
+            <button type="button" class="btn-small" onclick="window.uiManager.applyFadePreset('${fadeCue.id}', 'fadeOut')">Fade Out</button>
+            <button type="button" class="btn-small" onclick="window.uiManager.applyFadePreset('${fadeCue.id}', 'fadeIn')">Fade In</button>
+        </div>
+    `;
+    
+    return html;
+}
+
+/**
+ * Bind fade cue inspector events
+ */
+bindFadeCueEvents(cue) {
+    // Fade mode change
+    const fadeModeSelect = document.getElementById('fade-mode');
+    if (fadeModeSelect) {
+        fadeModeSelect.addEventListener('change', (e) => {
+            cue.fadeMode = e.target.value;
+            this.cueManager.emit('cueUpdated', { cue });
+        });
+    }
+    
+    // Fade curve change
+    const fadeCurveSelect = document.getElementById('fade-curve');
+    if (fadeCurveSelect) {
+        fadeCurveSelect.addEventListener('change', (e) => {
+            cue.fadeCurve = e.target.value;
+            this.cueManager.emit('cueUpdated', { cue });
+        });
+    }
+    
+    // Fade duration change
+    const fadeDurationInput = document.getElementById('fade-duration');
+    if (fadeDurationInput) {
+        fadeDurationInput.addEventListener('change', (e) => {
+            cue.duration = parseFloat(e.target.value) * 1000;
+            this.cueManager.emit('cueUpdated', { cue });
+        });
+    }
+    
+    // Parameter value changes
+    document.querySelectorAll('.param-start-value, .param-end-value').forEach(input => {
+        input.addEventListener('change', () => {
+            this.updateFadeParameters(cue);
+        });
+    });
+    
+    // Remove parameter buttons
+    document.querySelectorAll('.remove-param').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const paramIndex = parseInt(e.target.dataset.paramIndex);
+            cue.fadeParameters.splice(paramIndex, 1);
+            this.updateInspector(); // Refresh the UI
+            this.cueManager.emit('cueUpdated', { cue });
+        });
+    });
+    
+    // Add parameter button
+    const addParamBtn = document.getElementById('add-parameter-btn');
+    if (addParamBtn) {
+        addParamBtn.addEventListener('click', () => {
+            this.addFadeParameter(cue);
+        });
+    }
+}
+
+/**
+ * Update fade parameters from UI
+ */
+updateFadeParameters(cue) {
+    if (!cue.fadeParameters) cue.fadeParameters = [];
+    
+    document.querySelectorAll('.fade-parameter-row').forEach((row, index) => {
+        if (cue.fadeParameters[index]) {
+            const startValue = parseFloat(row.querySelector('.param-start-value').value);
+            const endValue = parseFloat(row.querySelector('.param-end-value').value);
+            
+            cue.fadeParameters[index].startValue = startValue;
+            cue.fadeParameters[index].endValue = endValue;
+        }
+    });
+    
+    this.cueManager.emit('cueUpdated', { cue });
+}
+
+/**
+ * Add a new fade parameter
+ */
+addFadeParameter(cue) {
+    const select = document.getElementById('add-parameter-select');
+    const paramName = select.value;
+    
+    if (!paramName) return;
+    
+    const targetCue = this.cueManager.getCue(cue.targetCueId);
+    if (!targetCue) return;
+    
+    const availableParams = this.getAvailableFadeParameters(targetCue);
+    const paramDef = availableParams.find(p => p.name === paramName);
+    
+    if (!paramDef) return;
+    
+    if (!cue.fadeParameters) cue.fadeParameters = [];
+    
+    // Add new parameter with default values
+    cue.fadeParameters.push({
+        name: paramName,
+        startValue: paramDef.default,
+        endValue: paramName.includes('volume') || paramName.includes('opacity') ? 0 : paramDef.default
+    });
+    
+    // Refresh UI
+    this.updateInspector();
+    this.cueManager.emit('cueUpdated', { cue });
+}
+
+/**
+ * Apply fade presets
+ */
+applyFadePreset(cueId, presetType) {
+    const cue = this.cueManager.getCue(cueId);
+    const targetCue = cue.targetCueId ? this.cueManager.getCue(cue.targetCueId) : null;
+    
+    if (!cue || !targetCue) return;
+    
+    cue.fadeParameters = [];
+    
+    switch (presetType) {
+        case 'fadeOut':
+            if (targetCue.type === 'audio') {
+                cue.fadeParameters.push({ name: 'volume', startValue: 1.0, endValue: 0.0 });
+            } else if (targetCue.type === 'video') {
+                cue.fadeParameters.push({ name: 'opacity', startValue: 1.0, endValue: 0.0 });
+            }
+            break;
+            
+        case 'fadeIn':
+            if (targetCue.type === 'audio') {
+                cue.fadeParameters.push({ name: 'volume', startValue: 0.0, endValue: 1.0 });
+            } else if (targetCue.type === 'video') {
+                cue.fadeParameters.push({ name: 'opacity', startValue: 0.0, endValue: 1.0 });
+            }
+            break;
+    }
+    
+    this.updateInspector();
+    this.cueManager.emit('cueUpdated', { cue });
+}
+
     // ==================== DRAG AND DROP SYSTEM ====================
     handleDrop(e) {
     if (!this.isDragging) return;
