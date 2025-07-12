@@ -1440,3 +1440,23 @@ textarea:focus {
     font-size: 12px;
     opacity: 0.6;
 }
+
+.cue-controls {
+    gap: 6px; /* Reduce from current gap */
+    flex-wrap: wrap; /* Allow wrapping */
+    max-width: 100%;
+}
+
+.btn-small {
+    white-space: nowrap;
+    min-width: auto;
+    padding: 6px 10px; /* Slightly smaller */
+}
+
+.cue-item {
+    transform: translateX(0); /* Set baseline */
+}
+
+.cue-item:hover {
+    transform: translateX(2px); /* Consistent movement */
+}
