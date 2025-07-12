@@ -1469,6 +1469,73 @@ showGroupNameDialog(defaultName, callback) {
             `;
         }
 
+        let enhancedSection = '';
+        
+        if (cue.type === 'target') {
+            enhancedSection += `
+                <div class="inspector-group">
+                    <h3>Target Settings</h3>
+                    <div class="inspector-field">
+                        <label>Host Cue</label>
+                        <input type="text" id="cue-target-host" value="${cue.targetCueId || ''}" placeholder="Cue to retarget">
+                    </div>
+                    <div class="inspector-field">
+                        <label>New Target</label>
+                        <input type="text" id="cue-new-target" value="${cue.newTargetCueId || ''}" placeholder="New target cue">
+                    </div>
+                </div>
+            `;
+        }
+
+        if (cue.type === 'load') {
+            enhancedSection += `
+                <div class="inspector-group">
+                    <h3>Load Settings</h3>
+                    <div class="inspector-field">
+                        <label>Load to Time (ms)</label>
+                        <input type="number" id="cue-load-time" value="${cue.loadToTime || 0}" min="0">
+                    </div>
+                </div>
+            `;
+        }
+
+        if (cue.type === 'fade') {
+            enhancedSection += `
+                <div class="inspector-group">
+                    <h3>Fade Settings</h3>
+                    <div class="inspector-field">
+                        <label>Fade Curve</label>
+                        <select id="cue-fade-curve">
+                            <option value="linear" ${cue.fadeCurve === 'linear' ? 'selected' : ''}>Linear</option>
+                            <option value="exponential" ${cue.fadeCurve === 'exponential' ? 'selected' : ''}>Exponential</option>
+                            <option value="logarithmic" ${cue.fadeCurve === 'logarithmic' ? 'selected' : ''}>Logarithmic</option>
+                            <option value="sCurve" ${cue.fadeCurve === 'sCurve' ? 'selected' : ''}>S-Curve</option>
+                        </select>
+                    </div>
+                    <div class="inspector-field">
+                        <label>Fade Direction</label>
+                        <select id="cue-fade-direction">
+                            <option value="out" ${cue.fadeDirection === 'out' ? 'selected' : ''}>Fade Out</option>
+                            <option value="in" ${cue.fadeDirection === 'in' ? 'selected' : ''}>Fade In</option>
+                            <option value="custom" ${cue.fadeDirection === 'custom' ? 'selected' : ''}>Custom</option>
+                        </select>
+                    </div>
+                    <div class="inspector-field">
+                        <label>Stop Target When Done</label>
+                        <input type="checkbox" id="cue-stop-target" ${cue.stopTargetWhenDone ? 'checked' : ''}>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Add Auto-Follow to timing section for all cue types
+        let autoFollowField = `
+            <div class="inspector-field">
+                <label>Auto-Follow</label>
+                <input type="checkbox" ${cue.autoFollow ? 'checked' : ''} id="cue-auto-follow">
+            </div>
+        `;
+
         this.elements.inspectorContent.innerHTML = `
             <div class="inspector-group">
                 <h3>Basic</h3>
@@ -1494,6 +1561,7 @@ showGroupNameDialog(defaultName, callback) {
             ${targetSection}
             ${groupSection}
             ${fadeSection}
+            ${enhancedSection}
             
             <div class="inspector-group">
                 <h3>Timing</h3>
@@ -1513,6 +1581,7 @@ showGroupNameDialog(defaultName, callback) {
                     <label>Auto Continue</label>
                     <input type="checkbox" ${cue.autoContinue ? 'checked' : ''} id="cue-auto-continue">
                 </div>
+                ${autoFollowField}
             </div>
             
             <div class="inspector-group">

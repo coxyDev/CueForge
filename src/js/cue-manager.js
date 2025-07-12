@@ -53,8 +53,6 @@ class CueManager {
             'pause': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'pause' },
             'goto': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'go to' },
             'fade': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['audio', 'video', 'group'], defaultName: 'fade' },
-            'load': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'load' },
-            'reset': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'reset' },
 
             // Advanced Cue Types
             'devamp': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['audio', 'video', 'group'], defaultName: 'devamp' },
@@ -1095,6 +1093,9 @@ stopFade(fadeCueId) {
             break;
         case 'goto':
             this.executeGoToCue(cue);
+            break;
+        case 'pause':
+            this.executePauseCue(cue);
             break;
         case 'fade':
             this.executeFadeCue(cue);
