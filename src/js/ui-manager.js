@@ -284,6 +284,46 @@ class UIManager {
         this.cueManager.on('playheadChanged', (data) => this.onPlayheadChanged(data));
         this.cueManager.on('cueMoved', (data) => this.onCueMoved(data));
 
+        document.getElementById('add-load-cue')?.addEventListener('click', () => {
+            this.addControlCue('load');
+        });
+        document.getElementById('add-reset-cue')?.addEventListener('click', () => {
+            this.addControlCue('reset');
+        });
+        document.getElementById('add-target-cue')?.addEventListener('click', () => {
+            this.addControlCue('target');
+        });
+
+        // Control Cues
+        document.getElementById('add-arm-cue')?.addEventListener('click', () => {
+            this.addControlCue('arm');
+        });
+        document.getElementById('add-disarm-cue')?.addEventListener('click', () => {
+            this.addControlCue('disarm');
+        });
+        document.getElementById('add-devamp-cue')?.addEventListener('click', () => {
+            this.addControlCue('devamp');
+        });
+
+        // Documentation Cues
+        document.getElementById('add-memo-cue')?.addEventListener('click', () => {
+            this.addCue('memo', { name: 'Memo' });
+        });
+
+        // Technical Cues
+        document.getElementById('add-text-cue')?.addEventListener('click', () => {
+            this.addCue('text', { name: 'Text Display' });
+        });
+        document.getElementById('add-network-cue')?.addEventListener('click', () => {
+            this.addCue('network', { name: 'Network Message' });
+        });
+        document.getElementById('add-midi-cue')?.addEventListener('click', () => {
+            this.addCue('midi', { name: 'MIDI Message' });
+        });
+        document.getElementById('add-light-cue')?.addEventListener('click', () => {
+            this.addCue('light', { name: 'Lighting Cue' });
+        });
+
         setInterval(() => this.updateCurrentTime(), 1000);
     }
 
@@ -2673,7 +2713,19 @@ createCueElement(cue, index) {
         'start': '▶',
         'stop': '⏹',
         'fade': '📉',
-        'goto': '🎯'
+        'goto': '🎯',
+        'load': '📥',
+        'reset': '🔄',
+        'target': '🎯',
+        'arm': '🔓',
+        'disarm': '🔒',
+        'devamp': '📤',
+        'memo': '📝',
+        'text': '📄',
+        'network': '🌐',
+        'midi': '🎹',
+        'light': '💡',
+        'timecode': '⏱️'
     };
     
     const typeIcon = typeIcons[cue.type] || '❓';
