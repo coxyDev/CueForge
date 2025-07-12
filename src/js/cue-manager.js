@@ -54,7 +54,21 @@ class CueManager {
             'goto': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'go to' },
             'fade': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['audio', 'video', 'group'], defaultName: 'fade' },
             'load': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'load' },
-            'reset': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'reset' }
+            'reset': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'reset' },
+
+            // Advanced Cue Types
+            'devamp': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['audio', 'video', 'group'], defaultName: 'devamp' },
+            'load': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'load' },
+            'reset': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'reset' },
+            'target': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['fade', 'start', 'stop', 'goto'], defaultName: 'target' },
+            'arm': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'arm' },
+            'disarm': { requiresTarget: true, targetType: 'cue', acceptedCueTypes: ['any'], defaultName: 'disarm' },
+            'memo': { requiresTarget: false, targetType: 'none', defaultName: 'memo' },
+            'text': { requiresTarget: false, targetType: 'none', defaultName: 'text' },
+            'light': { requiresTarget: false, targetType: 'none', defaultName: 'light' },
+            'network': { requiresTarget: false, targetType: 'none', defaultName: 'network' },
+            'midi': { requiresTarget: false, targetType: 'none', defaultName: 'midi' },
+            'timecode': { requiresTarget: false, targetType: 'none', defaultName: 'timecode' }
         };
     }
 
@@ -566,6 +580,12 @@ class CueManager {
             ...options
         };
 
+        baseCue.loaded = false;
+        baseCue.loadTime = 0;
+        baseCue.tempTarget = null;
+        baseCue.originalTarget = null;
+        baseCue.autoFollow = false; // Different from autoContinue
+
         // Type-specific defaults
         switch (type) {
             case 'audio':
@@ -624,19 +644,22 @@ class CueManager {
                 break;
 
             case 'fade':
-    Object.assign(baseCue, {
-        duration: 2000, // Default 2 second fade
-        fadeMode: 'absolute', // 'absolute' or 'relative'
-        fadeCurve: 'linear', // Default curve
-        fadeParameters: [], // Will be populated when target is set
-        targetCueId: options.targetCueId || null,
-        
-        // Additional fade properties
-        fadeDirection: 'out', // 'in', 'out', 'custom'
-        fadeQuality: 'smooth', // 'smooth', 'stepped'
-        
-        // Ensure not broken if target is provided
-        isBroken: !options.targetCueId && definition.requiresTarget
+                Object.assign(baseCue, {
+                    duration: 2000, // Default 2 second fade
+                    fadeMode: 'absolute', // 'absolute' or 'relative'
+                    fadeCurve: 'linear', // Default curve
+                    fadeParameters: [], // Will be populated when target is set
+                    targetCueId: options.targetCueId || null,
+                    
+                    // PHASE 4: Enhanced fade properties
+                    fadeDirection: options.fadeDirection || 'out', // 'in', 'out', 'custom'
+                    fadeQuality: options.fadeQuality || 'smooth', // 'smooth', 'stepped'
+                    stopTargetWhenDone: options.stopTargetWhenDone || false,
+                    curveTension: options.curveTension || 0.5,
+                    curveHandles: options.curveHandles || [], // For Bezier curves
+                    
+                    // Ensure not broken if target is provided
+                    isBroken: !options.targetCueId && definition.requiresTarget
     });
     
     // If we have a target, set up default parameters
@@ -648,7 +671,45 @@ class CueManager {
         }
     }
     break;
-        }
+
+            case 'target':
+                Object.assign(baseCue, {
+                    duration: 0,
+                    targetCueId: options.targetCueId || null,
+                    newTargetCueId: options.newTargetCueId || null
+                });
+                break;
+
+            case 'load':
+                Object.assign(baseCue, {
+                    duration: 0,
+                    targetCueId: options.targetCueId || null,
+                    loadToTime: options.loadToTime || 0
+                });
+                break;
+
+            case 'reset':
+            case 'arm':
+            case 'disarm':
+            case 'devamp':
+                Object.assign(baseCue, {
+                    duration: 0,
+                    targetCueId: options.targetCueId || null
+                });
+                break;
+
+            case 'memo':
+            case 'text':
+            case 'light':
+            case 'network':
+            case 'midi':
+            case 'timecode':
+                Object.assign(baseCue, {
+                    duration: options.duration || 0,
+                    isBroken: false // These cues don't require targets
+                });
+                break;
+            }
 
         // Set target if provided in options
         if (options.targetCueId && definition.targetType === 'cue') {
@@ -1038,6 +1099,32 @@ stopFade(fadeCueId) {
         case 'fade':
             this.executeFadeCue(cue);
             break;
+            case 'load':
+            this.executeLoadCue(cue);
+            break;
+        case 'reset':
+            this.executeResetCue(cue);
+            break;
+        case 'target':
+            this.executeTargetCue(cue);
+            break;
+        case 'arm':
+            this.executeArmCue(cue);
+            break;
+        case 'disarm':
+            this.executeDisarmCue(cue);
+            break;
+        case 'devamp':
+            this.executeDevampCue(cue);
+            break;
+        case 'memo':
+        case 'text':
+        case 'light':
+        case 'network':
+        case 'midi':
+        case 'timecode':
+            this.executeGenericCue(cue);
+            break;
         default:
             console.warn(`Unknown cue type: ${cue.type}`);
             return false;
@@ -1234,6 +1321,107 @@ stopFade(fadeCueId) {
         setTimeout(() => {
             this.completeCue(cue.id);
         }, 1000);
+        
+        this.emit('cueUpdated', { cue });
+    }
+
+    executeLoadCue(cue) {
+        console.log(`Executing Load cue: ${cue.number}`);
+        const targetCue = this.getCue(cue.targetCueId);
+        if (targetCue) {
+            targetCue.loaded = true;
+            targetCue.loadTime = cue.loadToTime || 0;
+            console.log(`Loaded cue ${targetCue.number}`);
+            this.emit('cueUpdated', { cue: targetCue });
+        }
+        cue.status = 'loaded';
+        this.emit('cueUpdated', { cue });
+    }
+
+    executeResetCue(cue) {
+        console.log(`Executing Reset cue: ${cue.number}`);
+        const targetCue = this.getCue(cue.targetCueId);
+        if (targetCue) {
+            this.stopSpecificCue(targetCue.id, false);
+            targetCue.loaded = false;
+            targetCue.tempTarget = null;
+            console.log(`Reset cue ${targetCue.number}`);
+            this.emit('cueUpdated', { cue: targetCue });
+        }
+        cue.status = 'loaded';
+        this.emit('cueUpdated', { cue });
+    }
+
+    executeTargetCue(cue) {
+        console.log(`Executing Target cue: ${cue.number}`);
+        const hostCue = this.getCue(cue.targetCueId);
+        const newTarget = this.getCue(cue.newTargetCueId);
+        if (hostCue && newTarget) {
+            if (!hostCue.originalTarget) {
+                hostCue.originalTarget = hostCue.targetCueId;
+            }
+            hostCue.tempTarget = newTarget.id;
+            hostCue.targetCueId = newTarget.id;
+            console.log(`Retargeted ${hostCue.number} to ${newTarget.number}`);
+            this.emit('cueUpdated', { cue: hostCue });
+        }
+        cue.status = 'loaded';
+        this.emit('cueUpdated', { cue });
+    }
+
+    executeArmCue(cue) {
+        console.log(`Executing Arm cue: ${cue.number}`);
+        const targetCue = this.getCue(cue.targetCueId);
+        if (targetCue) {
+            targetCue.armed = true;
+            console.log(`Armed cue ${targetCue.number}`);
+            this.emit('cueUpdated', { cue: targetCue });
+        }
+        cue.status = 'loaded';
+        this.emit('cueUpdated', { cue });
+    }
+
+    executeDisarmCue(cue) {
+        console.log(`Executing Disarm cue: ${cue.number}`);
+        const targetCue = this.getCue(cue.targetCueId);
+        if (targetCue) {
+            targetCue.armed = false;
+            console.log(`Disarmed cue ${targetCue.number}`);
+            this.emit('cueUpdated', { cue: targetCue });
+        }
+        cue.status = 'loaded';
+        this.emit('cueUpdated', { cue });
+    }
+
+    executeDevampCue(cue) {
+        console.log(`Executing Devamp cue: ${cue.number}`);
+        // Devamp = dynamic exit from loops/groups
+        const targetCue = this.getCue(cue.targetCueId);
+        if (targetCue && targetCue.type === 'group') {
+            targetCue.forceExit = true;
+            console.log(`Devamped group ${targetCue.number}`);
+            this.emit('cueUpdated', { cue: targetCue });
+        }
+        cue.status = 'loaded';
+        this.emit('cueUpdated', { cue });
+    }
+
+    executeGenericCue(cue) {
+        console.log(`Executing ${cue.type} cue: ${cue.number}`);
+        // Basic implementation for memo, text, light, network, midi, timecode
+        cue.status = 'playing';
+        
+        const executionData = {
+            startTime: Date.now(),
+            type: cue.type
+        };
+        
+        this.activeCues.set(cue.id, executionData);
+        
+        // Most of these are instantaneous or handled elsewhere
+        setTimeout(() => {
+            this.completeCue(cue.id);
+        }, cue.duration || 100);
         
         this.emit('cueUpdated', { cue });
     }
