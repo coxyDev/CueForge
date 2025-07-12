@@ -1000,6 +1000,88 @@ ipcMain.handle('select-startup-file', async () => {
     }
 });
 
+// Media Browser IPC handlers
+ipcMain.handle('select-media-folder', async () => {
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory'],
+            title: 'Select Media Folder'
+        });
+        
+        if (!result.canceled) {
+            return { 
+                success: true, 
+                folderPath: result.filePaths[0] 
+            };
+        } else {
+            return { success: false };
+        }
+    } catch (error) {
+        console.error('Select media folder error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('get-media-files', async (event, options) => {
+    try {
+        const { folderPath, supportedFormats } = options;
+        const allFormats = [...supportedFormats.audio, ...supportedFormats.video];
+        
+        const files = await fs.readdir(folderPath);
+        const mediaFiles = [];
+        
+        for (const file of files) {
+            const filePath = path.join(folderPath, file);
+            const stats = await fs.stat(filePath);
+            
+            if (stats.isFile()) {
+                const extension = path.extname(file).toLowerCase().substring(1);
+                
+                if (allFormats.includes(extension)) {
+                    const fileType = supportedFormats.audio.includes(extension) ? 'audio' : 'video';
+                    
+                    mediaFiles.push({
+                        name: file,
+                        path: filePath,
+                        extension: extension,
+                        type: fileType,
+                        size: stats.size,
+                        lastModified: stats.mtime.toISOString()
+                    });
+                }
+            }
+        }
+        
+        return { success: true, files: mediaFiles };
+    } catch (error) {
+        console.error('Get media files error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('get-media-metadata', async (event, filePath) => {
+    try {
+        const stats = await fs.stat(filePath);
+        const extension = path.extname(filePath).toLowerCase().substring(1);
+        
+        // Basic metadata - in a real implementation, you'd use libraries like ffprobe
+        const metadata = {
+            path: filePath,
+            size: stats.size,
+            lastModified: stats.mtime.toISOString(),
+            extension: extension,
+            type: ['mp3', 'wav', 'aiff', 'm4a'].includes(extension) ? 'audio' : 'video',
+            duration: 0, // TODO: Implement actual duration detection
+            // Additional properties would be detected here
+        };
+        
+        return { success: true, metadata };
+    } catch (error) {
+        console.error('Get media metadata error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 // Helper function for default settings
 function getDefaultSettings() {
     return {

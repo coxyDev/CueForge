@@ -68,6 +68,7 @@ class UIManager {
             
             deleteCue: document.getElementById('delete-cue'),
             settingsBtn: document.getElementById('settings-btn'),
+            mediaBrowserBtn: document.getElementById('media-browser-btn'),
             settingsModal: document.getElementById('settings-modal'),
             closeSettings: document.getElementById('close-settings'),
             inspectorContent: document.getElementById('inspector-content'),
@@ -150,6 +151,9 @@ class UIManager {
         // Settings
         if (this.elements.settingsBtn) {
             this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
+        }
+        if (this.elements.mediaBrowserBtn) {
+            this.elements.mediaBrowserBtn.addEventListener('click', () => this.toggleMediaBrowser());
         }
         if (this.elements.closeSettings) {
             this.elements.closeSettings.addEventListener('click', () => this.closeSettings());
@@ -283,6 +287,7 @@ class UIManager {
         this.cueManager.on('showChanged', (data) => this.onShowChanged(data));
         this.cueManager.on('playheadChanged', (data) => this.onPlayheadChanged(data));
         this.cueManager.on('cueMoved', (data) => this.onCueMoved(data));
+        this.mediaBrowser = new MediaBrowser(this, this.cueManager);
 
         document.getElementById('add-load-cue')?.addEventListener('click', () => {
             this.addControlCue('load');
@@ -2082,6 +2087,12 @@ showGroupNameDialog(defaultName, callback) {
             } else {
                 this.elements.brokenCueCount.style.display = 'none';
             }
+        }
+    }
+
+    toggleMediaBrowser() {
+        if (this.mediaBrowser) {
+            this.mediaBrowser.toggle();
         }
     }
 
