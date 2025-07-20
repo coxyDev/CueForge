@@ -13,6 +13,8 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
         this.performanceMonitor = new AudioPerformanceMonitor(this);
         
         console.log('🎛️ Professional Audio Engine with VST support initialized');
+        // Initialize error handling components
+        this.setupCriticalErrorHandling();
     }
     
     async initializeAudioContext() {
@@ -25,6 +27,20 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
             });
         }
     }
+
+    setupCriticalErrorHandling() {
+    // Audio dropout detection
+    this.dropoutDetector = new AudioDropoutDetector(this.audioContext);
+    
+    // Memory leak monitoring
+    this.memoryMonitor = new MemoryLeakMonitor();
+    this.memoryMonitor.startMonitoring();
+    
+    // Automatic recovery procedures
+    this.recoveryManager = new AudioRecoveryManager(this);
+    
+    console.log('✅ Critical error handling initialized');
+}
     
     /**
      * Create enhanced audio cue with full professional features
@@ -159,6 +175,20 @@ async recoverAudioContext() {
     }
 }
 
+showCriticalError(message) {
+    console.error('🚨 Critical Error:', message);
+    
+    // Show in UI if available
+    if (window.uiManager && window.uiManager.showStatusMessage) {
+        window.uiManager.showStatusMessage(message, 'error');
+    }
+    
+    // Show system alert as fallback
+    if (window.alert) {
+        window.alert(`Critical Audio Error:\n\n${message}\n\nPlease save your work and restart the application.`);
+    }
+}
+
     /**
      * Audio worklet for high-performance processing
      */
@@ -174,6 +204,56 @@ async recoverAudioContext() {
         } catch (error) {
             console.warn('AudioWorklet not supported, using fallback processing');
             return null;
+        }
+    }
+
+    /**
+ * Clean up resources when destroying the audio engine
+ */
+    destroy() {
+        // Stop all monitoring
+        if (this.dropoutDetector) {
+            this.dropoutDetector.stopMonitoring();
+        }
+        
+        if (this.memoryMonitor) {
+            this.memoryMonitor.stopMonitoring();
+        }
+        
+        // Stop all cues
+        this.stopAllCues();
+        
+        // Disconnect all nodes
+        if (this.masterGainNode) {
+            this.masterGainNode.disconnect();
+        }
+        
+        // Close audio context
+        if (this.audioContext) {
+            this.audioContext.close();
+        }
+        
+        console.log('Audio engine destroyed');
+    }
+
+    /**
+     * Handle audio errors
+     */
+    handleAudioError(error) {
+        console.error('Audio error:', error);
+        
+        // Determine severity
+        const isCritical = error.message && (
+            error.message.includes('AudioContext') ||
+            error.message.includes('suspended') ||
+            error.message.includes('memory')
+        );
+        
+        if (isCritical && this.recoveryManager) {
+            this.recoveryManager.initiateRecovery(error.message);
+        } else {
+            // Log non-critical errors
+            console.warn('Non-critical audio error:', error);
         }
     }
 }
