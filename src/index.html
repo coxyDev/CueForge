@@ -235,6 +235,110 @@
         </div>
     </div>
 
+    <!-- Professional Audio Settings Modal -->
+<div id="pro-audio-modal" class="modal" style="display: none;">
+    <div class="modal-content large-modal">
+        <div class="modal-header">
+            <h2>Professional Audio Settings</h2>
+            <button id="close-pro-audio-modal" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="pro-audio-tabs">
+                <div class="tab-bar">
+                    <button class="tab-btn active" data-tab="performance">Performance</button>
+                    <button class="tab-btn" data-tab="vst-settings">VST Settings</button>
+                    <button class="tab-btn" data-tab="asio-config">ASIO Config</button>
+                    <button class="tab-btn" data-tab="monitoring">Monitoring</button>
+                </div>
+                
+                <!-- Performance Tab -->
+                <div id="performance-tab" class="tab-content active">
+                    <h3>Performance Optimization</h3>
+                    <div class="setting-group">
+                        <label>Audio Buffer Size:</label>
+                        <select id="buffer-size-select">
+                            <option value="64">64 samples (Ultra Low Latency)</option>
+                            <option value="128">128 samples (Low Latency)</option>
+                            <option value="256" selected>256 samples (Balanced)</option>
+                            <option value="512">512 samples (Power Saving)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>Sample Rate:</label>
+                        <select id="sample-rate-select">
+                            <option value="44100">44.1 kHz</option>
+                            <option value="48000" selected>48 kHz</option>
+                            <option value="96000">96 kHz</option>
+                        </select>
+                    </div>
+                    
+                    <div class="performance-meters">
+                        <div class="meter-group">
+                            <label>CPU Usage:</label>
+                            <div class="performance-meter">
+                                <div class="meter-bar" id="cpu-meter"></div>
+                                <span class="meter-value" id="cpu-value">0%</span>
+                            </div>
+                        </div>
+                        
+                        <div class="meter-group">
+                            <label>Audio Dropouts:</label>
+                            <span id="dropout-count">0</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- VST Settings Tab -->
+                <div id="vst-settings-tab" class="tab-content">
+                    <h3>VST Plugin Configuration</h3>
+                    <div class="vst-paths-config">
+                        <h4>Scan Paths:</h4>
+                        <div id="vst-paths-list"></div>
+                        <button id="add-vst-path" class="btn-small">Add Path</button>
+                        <button id="rescan-vst" class="btn-primary">Rescan Plugins</button>
+                    </div>
+                    
+                    <div class="vst-plugin-list">
+                        <h4>Discovered Plugins:</h4>
+                        <div id="vst-plugin-grid"></div>
+                    </div>
+                </div>
+                
+                <!-- ASIO Config Tab -->
+                <div id="asio-config-tab" class="tab-content">
+                    <h3>ASIO Interface Configuration</h3>
+                    <div class="asio-device-selection">
+                        <label>ASIO Device:</label>
+                        <select id="asio-device-select">
+                            <option value="">No ASIO Device</option>
+                        </select>
+                        <button id="asio-control-panel" class="btn-small">Control Panel</button>
+                    </div>
+                    
+                    <div class="asio-channels">
+                        <h4>Channel Routing:</h4>
+                        <div id="asio-channel-map"></div>
+                    </div>
+                </div>
+                
+                <!-- Monitoring Tab -->
+                <div id="monitoring-tab" class="tab-content">
+                    <h3>Audio Monitoring</h3>
+                    <div class="monitoring-display">
+                        <div class="level-meters-grid" id="global-level-meters"></div>
+                        <div class="spectrum-analyzer" id="spectrum-display"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="reset-audio-settings" class="btn-small">Reset to Defaults</button>
+            <button id="apply-pro-audio-settings" class="btn-primary">Apply Settings</button>
+        </div>
+    </div>
+</div>
+
     <!-- File Selection Modal for File Targets -->
     <div id="file-target-modal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -278,8 +382,13 @@
 
     <!-- Scripts -->
     <script src="js/cue-manager.js"></script>
-    <script src="js/ui-manager.js"></script>
+    <script src="js/audio-effects.js"></script>
+    <script src="js/audio-fade-automation.js"></script>
+    <script src="js/vst-integration.js"></script>
+    <script src="js/matrix-mixer-ui.js"></script>
     <script src="js/audio-engine.js"></script>
+    <script src="js/audio-effects-manager.js"></script>
+    <script src="js/ui-manager.js"></script>
     <script src="js/app.js"></script>
     <script src="js/media-browser.js"></script>
 </body>

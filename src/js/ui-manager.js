@@ -24,6 +24,7 @@ class UIManager {
         this.isDragging = false;
         
         this.initializeElements();
+        this.initializeProfessionalAudio();
         this.bindEvents();
         this.setupEventListeners();
         this.setupGlobalKeyHandler();
@@ -99,6 +100,69 @@ class UIManager {
             applyFileTarget: document.getElementById('apply-file-target')
         };
     }
+
+    initializeProfessionalAudio() {
+    // Initialize professional audio components
+    this.proAudioManager = new ProfessionalAudioManager(this.audioEngine, this);
+    
+    // Add professional audio button to main toolbar
+    this.addProfessionalAudioButton();
+    
+    // Initialize performance monitoring
+    this.startPerformanceMonitoring();
+}
+
+addProfessionalAudioButton() {
+    const toolbar = document.querySelector('.toolbar');
+    if (toolbar) {
+        const proAudioBtn = document.createElement('button');
+        proAudioBtn.className = 'btn-small pro-audio-btn';
+        proAudioBtn.innerHTML = '🎛️ Pro Audio';
+        proAudioBtn.title = 'Professional Audio Settings';
+        
+        proAudioBtn.addEventListener('click', () => {
+            this.proAudioManager.openProfessionalAudioModal();
+        });
+        
+        toolbar.appendChild(proAudioBtn);
+    }
+}
+
+startPerformanceMonitoring() {
+    setInterval(() => {
+        if (this.audioEngine.performanceMonitor) {
+            const stats = this.audioEngine.performanceMonitor.getStats();
+            this.updatePerformanceDisplay(stats);
+        }
+    }, 1000);
+}
+
+updatePerformanceDisplay(stats) {
+    // Update CPU meter
+    const cpuMeter = document.getElementById('cpu-meter');
+    const cpuValue = document.getElementById('cpu-value');
+    
+    if (cpuMeter && cpuValue) {
+        cpuMeter.style.width = `${stats.cpuUsage}%`;
+        cpuValue.textContent = `${Math.round(stats.cpuUsage)}%`;
+        
+        // Color coding
+        if (stats.cpuUsage > 80) {
+            cpuMeter.style.background = '#dc3545';
+        } else if (stats.cpuUsage > 60) {
+            cpuMeter.style.background = '#ffc107';
+        } else {
+            cpuMeter.style.background = '#28a745';
+        }
+    }
+    
+    // Update dropout count
+    const dropoutCount = document.getElementById('dropout-count');
+    if (dropoutCount) {
+        dropoutCount.textContent = stats.dropouts;
+        dropoutCount.style.color = stats.dropouts > 0 ? '#dc3545' : '#28a745';
+    }
+}
 
     bindEvents() {
         // Transport controls

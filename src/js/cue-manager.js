@@ -70,6 +70,16 @@ class CueManager {
         };
     }
 
+    async initializeNativeAudio() {
+       this.nativeAudioEngine = new NativeAudioEngine();
+       const success = await this.nativeAudioEngine.initialize();
+       if (success) {
+           console.log('Professional audio engine ready');
+           this.updateAudioStatus();
+       }
+       return success;
+   }
+
     // ==================== MULTI-SELECTION SYSTEM ====================
 
     /**

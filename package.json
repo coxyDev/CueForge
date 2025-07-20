@@ -11,6 +11,9 @@
     "build:portable": "electron-builder --win portable",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
+     "build:audio": "webpack --config webpack.audio.config.js",
+    "test:audio": "node tests/audio-engine-tests.js",
+    "benchmark:audio": "node tests/performance-benchmarks.js",
     "dist": "npm run build",
     "pack": "electron-builder --dir",
     "clean": "rimraf dist build",
@@ -43,7 +46,9 @@
   "dependencies": {
     "fs-extra": "^11.1.1",
     "lodash": "^4.17.21",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "web-audio-api": "^0.2.2",
+    "audio-worklet": "^1.0.0"
   },
   "build": {
     "appId": "com.joelcox.cueforge",

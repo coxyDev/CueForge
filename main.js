@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
+const vstHost = require('./native/vst-host');
 
 // Enable live reload for development
 if (process.env.NODE_ENV === 'development') {
@@ -1124,6 +1125,14 @@ app.whenReady().then(() => {
         });
     });
 });
+
+// Rebuild native addon if needed
+   const { execSync } = require('child_process');
+   try {
+       execSync('cd shared-audio-core/bindings/electron && npm run build', { stdio: 'inherit' });
+   } catch (error) {
+       console.warn('Native audio rebuild failed:', error.message);
+   }
 
 app.on('window-all-closed', () => {
     console.log('All windows closed - forcing quit');
