@@ -1,7 +1,24 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
-const vstHost = require('./native/vst-host');
+    let vstHost = null;
+    try {
+        vstHost = require('./native/vst-host');
+        console.log('VST host module loaded successfully');
+    } catch (error) {
+        console.log('VST host module not available - VST support disabled');
+        // Create a mock vstHost object to prevent errors
+        vstHost = {
+            scanPlugins: async () => {
+                console.log('VST scanning not implemented');
+                return [];
+            },
+            loadPlugin: async (pluginPath) => {
+                console.log('VST loading not implemented');
+                return null;
+            }
+        };
+    }
 
 // Enable live reload for development
 if (process.env.NODE_ENV === 'development') {

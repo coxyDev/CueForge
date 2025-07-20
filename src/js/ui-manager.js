@@ -103,7 +103,11 @@ class UIManager {
 
     initializeProfessionalAudio() {
     // Initialize professional audio components
-    this.proAudioManager = new ProfessionalAudioManager(this.audioEngine, this);
+    if (this.audioEngine && window.ProfessionalAudioManager) {
+        this.professionalAudioManager = new ProfessionalAudioManager(this.audioEngine);
+    } else {
+        console.log('Professional audio features will be initialized when audio engine is ready');
+    }
     
     // Add professional audio button to main toolbar
     this.addProfessionalAudioButton();
