@@ -397,7 +397,51 @@ updatePerformanceDisplay(stats) {
             this.addCue('light', { name: 'Lighting Cue' });
         });
 
+        // Audio control listeners
+        document.addEventListener('input', (e) => {
+            const selectedCue = this.cueManager.selectedCue;
+            if (!selectedCue || selectedCue.type !== 'audio') return;
+            
+            const audioCue = this.audioEngine?.getCue(selectedCue.id);
+            if (!audioCue) return;
+            
+            if (e.target.classList.contains('volume-slider')) {
+                const volume = e.target.value / 100;
+                audioCue.setVolume(volume);
+                e.target.nextElementSibling.textContent = `${Math.round(volume * 100)}%`;
+            } else if (e.target.classList.contains('pan-slider')) {
+                const pan = e.target.value / 100;
+                audioCue.setPan(pan);
+                const label = pan > 0 ? 'R' : pan < 0 ? 'L' : 'C';
+                e.target.nextElementSibling.textContent = `${label}${Math.abs(Math.round(pan * 100))}`;
+            } else if (e.target.classList.contains('rate-slider')) {
+                const rate = e.target.value / 100;
+                audioCue.setPlaybackRate(rate);
+                e.target.nextElementSibling.textContent = `${Math.round(rate * 100)}%`;
+            }
+        });
+
+        document.addEventListener('change', (e) => {
+            const selectedCue = this.cueManager.selectedCue;
+            if (!selectedCue || selectedCue.type !== 'audio') return;
+            
+            const audioCue = this.audioEngine?.getCue(selectedCue.id);
+            if (!audioCue) return;
+            
+            if (e.target.id === `loop-${selectedCue.id}`) {
+                audioCue.setLoop(e.target.checked);
+            }
+        });
+
         setInterval(() => this.updateCurrentTime(), 1000);
+    }
+
+        formatTime(seconds) {
+        if (!seconds || seconds === 0) return '0:00';
+        
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 
     // ==================== EVENT HANDLERS ====================
@@ -2906,6 +2950,73 @@ formatDuration(duration) {
     const remainingSeconds = seconds % 60;
     
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+generateAudioInspector(cue) {
+    const audioCue = this.audioEngine?.getCue(cue.id);
+    const volume = audioCue?.volume ?? cue.volume ?? 1.0;
+    const pan = audioCue?.pan ?? cue.pan ?? 0;
+    
+    return `
+        <div class="inspector-section">
+            <h4>Audio Controls</h4>
+            
+            <div class="control-group">
+                <label for="volume-${cue.id}">Volume:</label>
+                <div class="slider-container">
+                    <input type="range" 
+                           id="volume-${cue.id}" 
+                           min="0" 
+                           max="100" 
+                           value="${volume * 100}"
+                           class="volume-slider">
+                    <span class="slider-value">${Math.round(volume * 100)}%</span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label for="pan-${cue.id}">Pan:</label>
+                <div class="slider-container">
+                    <input type="range" 
+                           id="pan-${cue.id}" 
+                           min="-100" 
+                           max="100" 
+                           value="${pan * 100}"
+                           class="pan-slider">
+                    <span class="slider-value">${pan > 0 ? 'R' : pan < 0 ? 'L' : 'C'}${Math.abs(Math.round(pan * 100))}</span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" 
+                           id="loop-${cue.id}" 
+                           ${audioCue?.loop ? 'checked' : ''}>
+                    Loop
+                </label>
+            </div>
+            
+            <div class="control-group">
+                <label for="rate-${cue.id}">Playback Rate:</label>
+                <div class="slider-container">
+                    <input type="range" 
+                           id="rate-${cue.id}" 
+                           min="25" 
+                           max="200" 
+                           value="${(audioCue?.playbackRate ?? 1) * 100}"
+                           class="rate-slider">
+                    <span class="slider-value">${Math.round((audioCue?.playbackRate ?? 1) * 100)}%</span>
+                </div>
+            </div>
+            
+            ${audioCue?.isLoaded ? `
+                <div class="audio-info">
+                    <p>Duration: ${this.formatTime(audioCue.getDuration())}</p>
+                    <p>Status: ${audioCue.isPlaying ? 'Playing' : 'Stopped'}</p>
+                </div>
+            ` : '<p class="loading-message">Loading audio...</p>'}
+        </div>
+    `;
 }
 }
 

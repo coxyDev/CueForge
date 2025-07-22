@@ -12,9 +12,10 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
         // Performance monitoring
         this.performanceMonitor = new AudioPerformanceMonitor(this);
         
+        // Initialize Patch Manager
+        this.patchManager = new AudioPatchManager(this);
+        
         console.log('🎛️ Professional Audio Engine with VST support initialized');
-        // Initialize error handling components
-        this.setupCriticalErrorHandling();
     }
     
     async initializeAudioContext() {
@@ -26,6 +27,21 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
                 console.log(`VST Scan: ${progress.phase} - ${Math.round(progress.progress * 100)}%`);
             });
         }
+        
+        // Create default audio patches
+        this.createDefaultPatches();
+    }
+
+    createDefaultPatches() {
+    // Create main output patch
+    const mainPatch = this.patchManager.createPatch('Main', 'default', 64);
+        mainPatch.setDefaultRouting();
+        
+        // Create monitor output patch
+        const monitorPatch = this.patchManager.createPatch('Monitor', 'default', 16);
+        monitorPatch.routeCueOutputsToStereo(0, false);
+        
+        console.log('✅ Default audio patches created');
     }
 
     setupCriticalErrorHandling() {
@@ -45,24 +61,93 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
     /**
      * Create enhanced audio cue with full professional features
      */
-    async createAudioCue(id, filePath) {
-        const cue = await super.createAudioCue(id, filePath);
+  async createAudioCue(id, filePath) {
+        // Use enhanced audio cue if available
+        if (typeof AudioCueEnhanced !== 'undefined') {
+            const cue = new AudioCueEnhanced(id, this, filePath);
+            this.cues.set(id, cue);
+            return cue;
+        } else {
+            // Fallback to regular AudioCue
+            const cue = new AudioCue(id, this, filePath);
+            this.cues.set(id, cue);
+            
+            // Create effects chain for compatibility
+            if (window.ProfessionalAudioManager) {
+                const effectsManager = new ProfessionalAudioManager(this);
+                const effectsChain = effectsManager.createEffectsChain(id);
+                cue.connectEffectsChain(effectsChain);
+            }
+            
+            return cue;
+        }
+    }
+
+        createOutputPatch(name, deviceId = 'default', numCueOutputs = 64) {
+        return this.patchManager.createPatch(name, deviceId, numCueOutputs);
+    }
+
+    getOutputPatch(name) {
+        return this.patchManager.getPatch(name);
+    }
+
+    getAllOutputPatches() {
+        return this.patchManager.getAllPatches();
+    }
+
+    setDefaultOutputPatch(patchName) {
+        return this.patchManager.setDefaultPatch(patchName);
+    }
+
+    getCue(id) {
+        return this.cues.get(id);
+    }
+
+    getOutputNode() {
+        return this.masterGainNode || this.audioContext.destination;
+    }
+
+    async ensureAudioContext() {
+        if (!this.initialized || this.audioContext.state === 'suspended') {
+            try {
+                await this.audioContext.resume();
+            } catch (error) {
+                console.error('Failed to resume audio context:', error);
+                throw error;
+            }
+        }
+    }
+
+    setMasterVolume(volume) {
+        this.masterVolume = Math.max(0, Math.min(1, volume));
+        if (this.masterGainNode) {
+            this.masterGainNode.gain.value = this.masterVolume;
+        }
+    }
+
+    // File URL helper (if not already present)
+    getFileUrl(filePath) {
+        if (!filePath) return null;
         
-        if (cue) {
-            // Add VST support
-            cue.vstPlugins = new Map();
-            
-            // Enhanced effects chain
-            cue.effectsChain = new EffectsChain(this.audioContext);
-            
-            // Professional matrix mixer UI
-            cue.matrixUI = null;
-            
-            // Performance optimization
-            cue.audioWorkletProcessor = await this.createAudioWorklet(id);
+        if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('blob:')) {
+            return filePath;
         }
         
-        return cue;
+        if (filePath.startsWith('file://')) {
+            return filePath;
+        }
+        
+        let normalizedPath = filePath.replace(/\\/g, '/');
+        
+        if (/^[A-Z]:/i.test(normalizedPath)) {
+            return `file:///${normalizedPath}`;
+        }
+        
+        if (!normalizedPath.startsWith('/')) {
+            normalizedPath = '/' + normalizedPath;
+        }
+        
+        return `file://${normalizedPath}`;
     }
     
     /**
