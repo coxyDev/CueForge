@@ -92,42 +92,31 @@ class CueForgeApp {
     }
 
     setupAudioPlayback() {
-        // Override cue manager's play method to use audio engine
-        const originalPlay = this.cueManager.playCue.bind(this.cueManager);
-        
-        this.cueManager.playCue = async (cueId) => {
-            const cue = this.cueManager.getCue(cueId);
-            if (!cue) return;
+        // Update file target method to create audio cue
+        const originalSetFileTarget = this.cueManager.setFileTarget.bind(this.cueManager);
+
+        this.cueManager.setFileTarget = async (cueId, filePath, fileName) => {
+            // Call original method
+            const result = originalSetFileTarget(cueId, filePath, fileName);
             
-            if (cue.type === 'audio' && cue.fileTarget) {
-                try {
-                    // Ensure audio context is running
-                    await this.audioEngine.ensureAudioContext();
-                    
-                    // Create or get audio cue from engine
-                    let audioCue = this.audioEngine.getCue(cueId);
-                    if (!audioCue) {
-                        audioCue = await this.audioEngine.createAudioCue(cueId, cue.fileTarget);
-                    }
-                    
-                    // Play the audio
-                    if (audioCue && audioCue.play) {
-                        await audioCue.play();
-                        cue.isPlaying = true;
+            if (result) {
+                const cue = this.cueManager.getCue(cueId);
+                if (cue && cue.type === 'audio') {
+                    try {
+                        // Create audio cue with the file
+                        const audioCue = await this.audioEngine.createAudioCue(cueId, filePath);
                         
-                        // Update UI
-                        if (this.uiManager) {
-                            this.uiManager.updateCueDisplay(cueId);
+                        // Update inspector to show matrix
+                        if (this.uiManager && this.cueManager.selectedCue?.id === cueId) {
+                            this.uiManager.updateInspector(cue);
                         }
+                    } catch (error) {
+                        console.error('Failed to create audio cue:', error);
                     }
-                } catch (error) {
-                    console.error('Failed to play audio cue:', error);
-                    this.uiManager.showStatusMessage(`Failed to play audio: ${error.message}`, 'error');
                 }
-            } else {
-                // Use original play method for non-audio cues
-                originalPlay(cueId);
             }
+            
+            return result;
         };
         
         // Override stop method

@@ -1,4 +1,3 @@
-// Replace entire file with enhanced version that includes fade automation
 class ProfessionalAudioEngine extends AudioEngineWithFades {
     constructor() {
         super();
@@ -14,6 +13,8 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
         
         // Initialize Patch Manager
         this.patchManager = new AudioPatchManager(this);
+
+        this.setupCriticalErrorHandling();
         
         console.log('🎛️ Professional Audio Engine with VST support initialized');
     }

@@ -32,6 +32,7 @@ class UIManager {
         this.setupDragAndDrop();
         this.ensureStylesLoaded();
         this.ensureSettingsModalHidden();
+        this.setupTabSwitching();
         
         // Check for File System Access API
         this.hasFileSystemAccess = 'showOpenFilePicker' in window;
@@ -116,21 +117,22 @@ class UIManager {
     this.startPerformanceMonitoring();
 }
 
-addProfessionalAudioButton() {
-    const toolbar = document.querySelector('.toolbar');
-    if (toolbar) {
-        const proAudioBtn = document.createElement('button');
-        proAudioBtn.className = 'btn-small pro-audio-btn';
-        proAudioBtn.innerHTML = '🎛️ Pro Audio';
-        proAudioBtn.title = 'Professional Audio Settings';
-        
-        proAudioBtn.addEventListener('click', () => {
-            this.proAudioManager.openProfessionalAudioModal();
-        });
-        
-        toolbar.appendChild(proAudioBtn);
+    addProfessionalAudioButton() {
+        const toolbar = document.querySelector('.main-controls');
+        if (toolbar && !document.querySelector('.pro-audio-btn')) {
+            const proAudioBtn = document.createElement('button');
+            proAudioBtn.className = 'btn-small pro-audio-btn';
+            proAudioBtn.innerHTML = '🎛️ Pro Audio';
+            proAudioBtn.title = 'Professional Audio Settings';
+            
+            proAudioBtn.addEventListener('click', () => {
+                console.log('Opening professional audio settings...');
+                // Future implementation for pro audio modal
+            });
+            
+            toolbar.appendChild(proAudioBtn);
+        }
     }
-}
 
 startPerformanceMonitoring() {
     setInterval(() => {
@@ -430,6 +432,21 @@ updatePerformanceDisplay(stats) {
             
             if (e.target.id === `loop-${selectedCue.id}`) {
                 audioCue.setLoop(e.target.checked);
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('edit-patch-btn')) {
+                const patchName = e.target.dataset.patch;
+                this.openPatchEditor(patchName);
+            }
+        });
+
+        document.addEventListener('change', (e) => {
+            if (e.target.classList.contains('output-patch-select')) {
+                const cueId = e.target.id.replace('output-patch-', '');
+                const patchName = e.target.value;
+                this.changeOutputPatch(cueId, patchName);
             }
         });
 
@@ -1522,6 +1539,10 @@ showGroupNameDialog(defaultName, callback) {
             // Multiple cue selection - show multi-cue inspector
             this.updateMultiCueInspector(selectedCues);
         }
+
+        if (cue.type === 'audio') {
+            this.initializeAudioMatrixUI(cue);
+        }
     }
 
     updateSingleCueInspector(cue) {
@@ -2446,6 +2467,14 @@ showGroupNameDialog(defaultName, callback) {
         return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
 
+    formatTime(seconds) {
+        if (!seconds || seconds === 0) return '0:00';
+        
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+
     formatFileSize(bytes) {
         if (bytes === 0) return '0 Bytes';
         const k = 1024;
@@ -3018,6 +3047,221 @@ generateAudioInspector(cue) {
         </div>
     `;
 }
+
+    generateAudioInspectorWithLevels(cue) {
+        const audioCue = this.audioEngine?.getCue(cue.id);
+        const isEnhanced = audioCue && audioCue.cueMatrix;
+        
+        if (!isEnhanced) {
+            // Fall back to simple audio controls
+            return this.generateAudioInspector(cue);
+        }
+        
+        return `
+            <div class="inspector-tabs">
+                <div class="tab-bar">
+                    <button class="tab-btn active" data-tab="io">I/O</button>
+                    <button class="tab-btn" data-tab="levels">Levels</button>
+                    <button class="tab-btn" data-tab="trim">Trim</button>
+                    <button class="tab-btn" data-tab="effects">Audio FX</button>
+                </div>
+                
+                <!-- I/O Tab -->
+                <div id="io-tab" class="tab-content active">
+                    ${this.generateIOTab(cue, audioCue)}
+                </div>
+                
+                <!-- Levels Tab -->
+                <div id="levels-tab" class="tab-content" style="display: none;">
+                    ${this.generateLevelsTab(cue, audioCue)}
+                </div>
+                
+                <!-- Trim Tab -->
+                <div id="trim-tab" class="tab-content" style="display: none;">
+                    ${this.generateTrimTab(cue, audioCue)}
+                </div>
+                
+                <!-- Effects Tab -->
+                <div id="effects-tab" class="tab-content" style="display: none;">
+                    ${this.generateEffectsTab(cue, audioCue)}
+                </div>
+            </div>
+        `;
+    }
+
+    generateIOTab(cue, audioCue) {
+        const patches = this.audioEngine.getAllOutputPatches();
+        const currentPatch = audioCue.outputPatch;
+        
+        return `
+            <div class="inspector-section">
+                <h4>Input/Output Settings</h4>
+                
+                <div class="control-group">
+                    <label>File Target:</label>
+                    <div class="file-info">
+                        ${cue.fileTarget ? `
+                            <div class="file-name">${cue.fileName || 'Unknown'}</div>
+                            <div class="file-details">
+                                ${audioCue.numChannels} channels, 
+                                ${(audioCue.sampleRate / 1000).toFixed(1)}kHz, 
+                                ${this.formatTime(audioCue.duration)}
+                            </div>
+                        ` : '<span class="no-file">No file selected</span>'}
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="output-patch-${cue.id}">Audio Output:</label>
+                    <select id="output-patch-${cue.id}" class="output-patch-select">
+                        ${patches.map(patch => `
+                            <option value="${patch.name}" ${patch === currentPatch ? 'selected' : ''}>
+                                ${patch.name} - ${patch.deviceId} (${patch.numCueOutputs} outs)
+                            </option>
+                        `).join('')}
+                    </select>
+                    <button class="btn-small edit-patch-btn" data-patch="${currentPatch?.name}">
+                        Edit...
+                    </button>
+                </div>
+                
+                <div class="control-group">
+                    <label>Format:</label>
+                    <div class="format-info">
+                        ${audioCue.numChannels} in → ${currentPatch?.numCueOutputs || 64} out @ 48000 Hz
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    generateLevelsTab(cue, audioCue) {
+        return `
+            <div class="audio-levels-section">
+                <div class="levels-header">
+                    <button class="btn-small" id="set-levels-from-target">Set Levels from Target</button>
+                    <button class="btn-small" id="set-all-silent">Set All Silent</button>
+                    <button class="btn-small" id="assign-gangs">Assign Gangs</button>
+                    <button class="btn-small edit-patch-btn" data-patch="${audioCue.outputPatch?.name}">
+                        Edit Audio Patch
+                    </button>
+                </div>
+                
+                <div class="audio-matrix-container" id="cue-matrix-${cue.id}">
+                    <!-- Matrix UI will be rendered here -->
+                </div>
+            </div>
+        `;
+    }
+
+    generateTrimTab(cue, audioCue) {
+        const outputPatch = audioCue.outputPatch;
+        const numOutputs = outputPatch ? outputPatch.numCueOutputs : 64;
+        
+        let trimHtml = '<div class="trim-controls">';
+        trimHtml += '<h4>Post-Fader Trim</h4>';
+        trimHtml += '<div class="trim-grid">';
+        
+        // Main trim
+        trimHtml += `
+            <div class="trim-control main-trim">
+                <label>Main</label>
+                <input type="range" min="-60" max="12" value="0" class="trim-slider" data-output="main">
+                <input type="text" value="0" class="trim-value" data-output="main">
+            </div>
+        `;
+        
+        // Output trims (show first 8 for space)
+        for (let i = 0; i < Math.min(8, numOutputs); i++) {
+            const trimLevel = audioCue.trimLevels.get(i) || 0;
+            const outputName = outputPatch?.getCueOutputName(i) || `Out ${i + 1}`;
+            
+            trimHtml += `
+                <div class="trim-control">
+                    <label>${outputName}</label>
+                    <input type="range" min="-60" max="12" value="${trimLevel}" 
+                        class="trim-slider" data-output="${i}">
+                    <input type="text" value="${trimLevel}" 
+                        class="trim-value" data-output="${i}">
+                </div>
+            `;
+        }
+        
+        trimHtml += '</div></div>';
+        return trimHtml;
+    }
+
+    generateEffectsTab(cue, audioCue) {
+        return `
+            <div class="audio-effects-section">
+                <h4>Audio Effects</h4>
+                <p>Effects processing coming soon...</p>
+            </div>
+        `;
+    }
+
+    initializeAudioMatrixUI(cue) {
+        const audioCue = this.audioEngine?.getCue(cue.id);
+        if (!audioCue || !audioCue.cueMatrix) return;
+        
+        const container = document.getElementById(`cue-matrix-${cue.id}`);
+        if (!container) return;
+        
+        // Create matrix UI
+        const matrixUI = new MatrixMixerUI(container, audioCue.cueMatrix, {
+            showMeters: true,
+            showGangControls: true,
+            getInputName: (i) => `Ch ${i + 1}`,
+            getOutputName: (o) => {
+                const patch = audioCue.outputPatch;
+                return patch ? patch.getCueOutputName(o) : `Out ${o + 1}`;
+            }
+        });
+        
+        // Store reference
+        this.currentMatrixUI = matrixUI;
+    }
+
+    setupTabSwitching() {
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab-btn')) {
+                const tabBar = e.target.closest('.tab-bar');
+                const tabsContainer = tabBar.parentElement;
+                const targetTab = e.target.dataset.tab;
+                
+                // Update active states
+                tabBar.querySelectorAll('.tab-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                e.target.classList.add('active');
+                
+                // Show/hide tab content
+                tabsContainer.querySelectorAll('.tab-content').forEach(content => {
+                    content.style.display = 'none';
+                });
+                const targetContent = tabsContainer.querySelector(`#${targetTab}-tab`);
+                if (targetContent) {
+                    targetContent.style.display = 'block';
+                }
+            }
+        });
+    }
+
+    changeOutputPatch(cueId, patchName) {
+        const audioCue = this.audioEngine?.getCue(cueId);
+        const patch = this.audioEngine?.getOutputPatch(patchName);
+        
+        if (audioCue && patch) {
+            audioCue.setOutputPatch(patch);
+            this.updateInspector(this.cueManager.getCue(cueId));
+        }
+    }
+
+    openPatchEditor(patchName) {
+        // This would open a modal for editing the patch matrix
+        console.log(`Opening patch editor for: ${patchName}`);
+        // Implementation would go here
+    }
 }
 
 // Export for use in other modules
