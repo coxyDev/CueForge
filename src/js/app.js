@@ -5,10 +5,17 @@
 
 class CueForgeApp {
     constructor() {
-        console.log('🎬 Initializing CueForge with Professional Audio System...');
+        this.cueManager = null;
+        this.uiManager = null;
+        this.audioEngine = null;
+        this.initialized = false;
         
-        // Initialize core components in correct order
-        this.initializeCoreComponents();
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.initialize());
+        } else {
+            this.initialize();
+        }
     }
 
     async initialize() {
@@ -39,65 +46,88 @@ class CueForgeApp {
         }
     }
 
-     async initializeCoreComponents() {
-        try {
-            // 1. Initialize Cue Manager first
-            console.log('Initializing Cue Manager...');
-            this.cueManager = new CueManager();
-            
-            // 2. Check for required dependencies before creating audio engine
-            this.checkDependencies();
-            
-            // 3. Initialize Professional Audio Engine
-            console.log('Initializing Professional Audio Engine...');
+    async initializeCoreComponents() {
+        // Initialize Professional Audio Engine
+        console.log('Initializing Professional Audio Engine...');
+        
+        // Use the ProfessionalAudioEngine if available, otherwise fall back
+        if (typeof ProfessionalAudioEngine !== 'undefined') {
             this.audioEngine = new ProfessionalAudioEngine();
+        } else {
+            console.warn('ProfessionalAudioEngine not found, using AudioEngineWithFades');
+            this.audioEngine = new AudioEngineWithFades();
+        }
+        
+        // Initialize audio context
+        try {
             await this.audioEngine.initializeAudioContext();
+            console.log('✅ Audio context initialized');
             
-            // 4. Initialize UI Manager
-            console.log('Initializing UI Manager...');
-            this.uiManager = new UIManager(this.cueManager, this.audioEngine);
+            // Setup error recovery if available
+            if (this.audioEngine.setupErrorRecovery) {
+                this.audioEngine.setupErrorRecovery();
+            }
             
-            // 5. Setup app-level event handlers
-            this.setupEventHandlers();
-            
-            // 6. Initialize performance monitoring UI updates
-            this.startPerformanceMonitoring();
-            
-            console.log('✅ CueForge initialized successfully');
-            this.showStatusMessage('CueForge ready', 'success');
+            // Enable live mode for better performance
+            if (this.audioEngine.enableLiveMode) {
+                this.audioEngine.enableLiveMode();
+            }
             
         } catch (error) {
-            console.error('❌ Failed to initialize CueForge:', error);
-            this.showInitializationError(error.message);
+            console.error('Failed to initialize audio context:', error);
+            // Continue without audio for now
         }
+
+        // Initialize Cue Manager with audio engine
+        this.cueManager = new CueManager();
+        this.cueManager.audioEngine = this.audioEngine; // Link audio engine to cue manager
+        
+        // Initialize UI Manager with targeting support
+        this.uiManager = new UIManager(this.cueManager, this.audioEngine);
+        
+        // Set up audio cue playback
+        this.setupAudioPlayback();
+        
+        console.log('✅ Core components initialized');
     }
 
     setupAudioPlayback() {
-        // Update file target method to create audio cue
-        const originalSetFileTarget = this.cueManager.setFileTarget.bind(this.cueManager);
-
-        this.cueManager.setFileTarget = async (cueId, filePath, fileName) => {
-            // Call original method
-            const result = originalSetFileTarget(cueId, filePath, fileName);
+        // Override cue manager's play method to use audio engine
+        const originalPlay = this.cueManager.playCue.bind(this.cueManager);
+        
+        this.cueManager.playCue = async (cueId) => {
+            const cue = this.cueManager.getCue(cueId);
+            if (!cue) return;
             
-            if (result) {
-                const cue = this.cueManager.getCue(cueId);
-                if (cue && cue.type === 'audio') {
-                    try {
-                        // Create audio cue with the file
-                        const audioCue = await this.audioEngine.createAudioCue(cueId, filePath);
-                        
-                        // Update inspector to show matrix
-                        if (this.uiManager && this.cueManager.selectedCue?.id === cueId) {
-                            this.uiManager.updateInspector(cue);
-                        }
-                    } catch (error) {
-                        console.error('Failed to create audio cue:', error);
+            if (cue.type === 'audio' && cue.fileTarget) {
+                try {
+                    // Ensure audio context is running
+                    await this.audioEngine.ensureAudioContext();
+                    
+                    // Create or get audio cue from engine
+                    let audioCue = this.audioEngine.getCue(cueId);
+                    if (!audioCue) {
+                        audioCue = await this.audioEngine.createAudioCue(cueId, cue.fileTarget);
                     }
+                    
+                    // Play the audio
+                    if (audioCue && audioCue.play) {
+                        await audioCue.play();
+                        cue.isPlaying = true;
+                        
+                        // Update UI
+                        if (this.uiManager) {
+                            this.uiManager.updateCueDisplay(cueId);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to play audio cue:', error);
+                    this.uiManager.showStatusMessage(`Failed to play audio: ${error.message}`, 'error');
                 }
+            } else {
+                // Use original play method for non-audio cues
+                originalPlay(cueId);
             }
-            
-            return result;
         };
         
         // Override stop method
@@ -272,400 +302,9 @@ class CueForgeApp {
             alert(message);
         }
     }
-
-     checkDependencies() {
-        const requiredClasses = [
-            'AudioPerformanceMonitor',
-            'AudioDropoutDetector', 
-            'MemoryLeakMonitor',
-            'AudioRecoveryManager',
-            'MatrixMixer',
-            'AudioPatchManager'
-        ];
-        
-        const missingDeps = [];
-        
-        requiredClasses.forEach(className => {
-            if (typeof window[className] === 'undefined') {
-                missingDeps.push(className);
-            }
-        });
-        
-        if (missingDeps.length > 0) {
-            console.warn('⚠️ Missing dependencies:', missingDeps);
-            // Continue with degraded functionality rather than failing completely
-        } else {
-            console.log('✅ All dependencies available');
-        }
-    }
-    
-    setupEventHandlers() {
-        // Transport controls
-        const stopAllBtn = document.getElementById('stop-all-btn');
-        const panicBtn = document.getElementById('panic-btn');
-        const goBtn = document.getElementById('go-btn');
-        
-        if (stopAllBtn) {
-            stopAllBtn.addEventListener('click', () => {
-                this.audioEngine.stopAllCues();
-                this.showStatusMessage('All cues stopped', 'info');
-            });
-        }
-        
-        if (panicBtn) {
-            panicBtn.addEventListener('click', () => {
-                this.handlePanic();
-            });
-        }
-        
-        if (goBtn) {
-            goBtn.addEventListener('click', () => {
-                this.handleGo();
-            });
-        }
-        
-        // Master volume control
-        const masterVolumeSlider = document.getElementById('master-volume');
-        const masterVolumeValue = document.getElementById('master-volume-value');
-        
-        if (masterVolumeSlider) {
-            masterVolumeSlider.addEventListener('input', (e) => {
-                const volume = parseFloat(e.target.value);
-                this.audioEngine.setMasterVolume(volume);
-                if (masterVolumeValue) {
-                    masterVolumeValue.textContent = Math.round(volume * 100) + '%';
-                }
-            });
-        }
-        
-        // Professional Audio Settings button
-        const proAudioBtn = document.getElementById('professional-audio-btn');
-        if (proAudioBtn) {
-            proAudioBtn.addEventListener('click', () => {
-                this.showProfessionalAudioModal();
-            });
-        }
-        
-        // Critical audio error handling
-        window.addEventListener('criticalAudioError', (event) => {
-            this.handleCriticalAudioError(event.detail.message);
-        });
-        
-        // Audio system failure handling
-        window.addEventListener('audioSystemFailure', (event) => {
-            this.handleAudioSystemFailure(event.detail);
-        });
-    }
-    
-    startPerformanceMonitoring() {
-        // Update performance stats every second
-        setInterval(() => {
-            this.updatePerformanceDisplay();
-        }, 1000);
-    }
-    
-    updatePerformanceDisplay() {
-        const performanceElement = document.getElementById('audio-performance');
-        if (!performanceElement || !this.audioEngine) return;
-        
-        try {
-            const stats = this.audioEngine.getPerformanceStats();
-            performanceElement.textContent = 
-                `CPU: ${Math.round(stats.cpu)}% | Mem: ${Math.round(stats.memory)}MB | Dropouts: ${stats.dropouts}`;
-        } catch (error) {
-            // Silently handle performance monitoring errors
-            performanceElement.textContent = 'Performance monitoring unavailable';
-        }
-    }
-    
-    handlePanic() {
-        console.log('🚨 PANIC button pressed');
-        
-        try {
-            // Stop all audio immediately
-            this.audioEngine.stopAllCues();
-            
-            // Reset audio context if needed
-            if (this.audioEngine.audioContext.state === 'suspended') {
-                this.audioEngine.audioContext.resume();
-            }
-            
-            // Clear any scheduled actions
-            this.cueManager.clearAllScheduledActions();
-            
-            // Update UI
-            this.showStatusMessage('PANIC: All audio stopped', 'warning');
-            
-            // Reset transport state
-            this.resetTransportState();
-            
-        } catch (error) {
-            console.error('Error during panic stop:', error);
-            this.showStatusMessage('Panic failed - check console', 'error');
-        }
-    }
-    
-    handleGo() {
-        console.log('▶️ GO button pressed');
-        
-        try {
-            // Find the next cue to execute
-            const nextCue = this.cueManager.getNextCue();
-            
-            if (nextCue) {
-                this.cueManager.executeCue(nextCue.id);
-                this.showStatusMessage(`Executed: ${nextCue.name}`, 'success');
-            } else {
-                this.showStatusMessage('No cue to execute', 'info');
-            }
-            
-        } catch (error) {
-            console.error('Error during GO:', error);
-            this.showStatusMessage('GO failed - check console', 'error');
-        }
-    }
-    
-    resetTransportState() {
-        // Reset any transport-related UI state
-        const goBtn = document.getElementById('go-btn');
-        if (goBtn) {
-            goBtn.classList.remove('active');
-        }
-    }
-    
-    showProfessionalAudioModal() {
-        const modal = document.getElementById('pro-audio-modal');
-        if (modal) {
-            modal.style.display = 'flex';
-            this.initializeProfessionalAudioModal();
-        }
-    }
-    
-    initializeProfessionalAudioModal() {
-        // Setup tab switching
-        const tabBtns = document.querySelectorAll('#pro-audio-modal .tab-btn');
-        const tabContents = document.querySelectorAll('#pro-audio-modal .tab-content');
-        
-        tabBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tabName = btn.dataset.tab;
-                
-                // Update active tab button
-                tabBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                
-                // Update active tab content
-                tabContents.forEach(content => {
-                    content.classList.remove('active');
-                    if (content.id === `${tabName}-tab`) {
-                        content.classList.add('active');
-                    }
-                });
-            });
-        });
-        
-        // Setup modal close handlers
-        const closeBtn = document.getElementById('close-pro-audio-modal');
-        const closeBtn2 = document.getElementById('close-pro-audio');
-        
-        [closeBtn, closeBtn2].forEach(btn => {
-            if (btn) {
-                btn.addEventListener('click', () => {
-                    document.getElementById('pro-audio-modal').style.display = 'none';
-                });
-            }
-        });
-        
-        // Setup performance monitoring in modal
-        this.updateModalPerformanceStats();
-        setInterval(() => this.updateModalPerformanceStats(), 1000);
-        
-        // Setup VST controls
-        this.setupVSTControls();
-    }
-    
-    updateModalPerformanceStats() {
-        if (!this.audioEngine) return;
-        
-        try {
-            const stats = this.audioEngine.getPerformanceStats();
-            
-            const cpuElement = document.getElementById('cpu-usage');
-            const memoryElement = document.getElementById('memory-usage');
-            const dropoutElement = document.getElementById('dropout-count');
-            
-            if (cpuElement) cpuElement.textContent = `${Math.round(stats.cpu)}%`;
-            if (memoryElement) memoryElement.textContent = `${Math.round(stats.memory)} MB`;
-            if (dropoutElement) dropoutElement.textContent = stats.dropouts;
-        } catch (error) {
-            // Silently handle errors
-        }
-    }
-    
-    setupVSTControls() {
-        const scanBtn = document.getElementById('scan-vst-btn');
-        const clearCacheBtn = document.getElementById('clear-vst-cache-btn');
-        const resetStatsBtn = document.getElementById('reset-stats-btn');
-        const forceGcBtn = document.getElementById('force-gc-btn');
-        
-        if (scanBtn) {
-            scanBtn.addEventListener('click', () => {
-                this.scanVSTPlugins();
-            });
-        }
-        
-        if (clearCacheBtn) {
-            clearCacheBtn.addEventListener('click', () => {
-                this.clearVSTCache();
-            });
-        }
-        
-        if (resetStatsBtn) {
-            resetStatsBtn.addEventListener('click', () => {
-                this.resetPerformanceStats();
-            });
-        }
-        
-        if (forceGcBtn) {
-            forceGcBtn.addEventListener('click', () => {
-                this.forceGarbageCollection();
-            });
-        }
-    }
-    
-    scanVSTPlugins() {
-        if (this.audioEngine.vstManager) {
-            this.showStatusMessage('Scanning for VST plugins...', 'info');
-            this.audioEngine.vstManager.scanForPlugins((progress) => {
-                console.log(`VST Scan Progress: ${Math.round(progress.progress * 100)}%`);
-            });
-        } else {
-            this.showStatusMessage('VST manager not available', 'warning');
-        }
-    }
-    
-    clearVSTCache() {
-        if (this.audioEngine.vstManager) {
-            this.audioEngine.vstManager.clearCache();
-            this.showStatusMessage('VST cache cleared', 'success');
-        }
-    }
-    
-    resetPerformanceStats() {
-        if (this.audioEngine.dropoutDetector) {
-            this.audioEngine.dropoutDetector.resetCounter();
-        }
-        this.showStatusMessage('Performance statistics reset', 'success');
-    }
-    
-    forceGarbageCollection() {
-        if (this.audioEngine.memoryMonitor) {
-            this.audioEngine.memoryMonitor.forceGarbageCollection();
-            this.showStatusMessage('Garbage collection requested', 'info');
-        }
-    }
-    
-    handleCriticalAudioError(message) {
-        console.error('🚨 Critical Audio Error:', message);
-        
-        // Show user-friendly error
-        this.showStatusMessage('Critical audio error - check console', 'error');
-        
-        // Try to recover automatically
-        if (this.audioEngine.recoveryManager) {
-            this.audioEngine.recoveryManager.initiateRecovery('Critical error reported');
-        }
-    }
-    
-    handleAudioSystemFailure(details) {
-        console.error('🚨 Audio System Failure:', details);
-        
-        // Show critical error to user
-        const message = `Audio system has failed after ${details.attempts} recovery attempts.\n\nReason: ${details.reason}\n\nPlease save your work and restart the application.`;
-        
-        if (confirm(message + '\n\nWould you like to attempt manual recovery?')) {
-            // Attempt manual recovery
-            this.attemptManualRecovery();
-        }
-    }
-    
-    async attemptManualRecovery() {
-        try {
-            this.showStatusMessage('Attempting manual recovery...', 'info');
-            
-            // Destroy current audio engine
-            if (this.audioEngine) {
-                this.audioEngine.destroy();
-            }
-            
-            // Create new audio engine
-            this.audioEngine = new ProfessionalAudioEngine();
-            await this.audioEngine.initializeAudioContext();
-            
-            // Reconnect UI
-            if (this.uiManager) {
-                this.uiManager.audioEngine = this.audioEngine;
-            }
-            
-            this.showStatusMessage('Manual recovery successful', 'success');
-            
-        } catch (error) {
-            console.error('Manual recovery failed:', error);
-            this.showStatusMessage('Manual recovery failed - restart required', 'error');
-        }
-    }
-    
-    showStatusMessage(message, type = 'info') {
-        const statusElement = document.getElementById('status-message');
-        if (statusElement) {
-            statusElement.textContent = message;
-            statusElement.className = `status-${type}`;
-            
-            // Clear message after 5 seconds for non-error messages
-            if (type !== 'error') {
-                setTimeout(() => {
-                    statusElement.textContent = 'Ready';
-                    statusElement.className = '';
-                }, 5000);
-            }
-        }
-        
-        console.log(`Status: ${message} (${type})`);
-    }
-    
-    showInitializationError(message) {
-        console.error('Initialization Error:', message);
-        
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'initialization-error';
-        errorDiv.innerHTML = `
-            <h2>CueForge Initialization Failed</h2>
-            <p><strong>Error:</strong> ${message}</p>
-            <p>Please check the console for more details and ensure all dependencies are loaded correctly.</p>
-            <button onclick="location.reload()">Reload Application</button>
-        `;
-        
-        document.body.appendChild(errorDiv);
-    }
 }
 
-// Auto-initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing CueForge...');
-    
-    try {
-        window.cueForgeApp = new CueForgeApp();
-    } catch (error) {
-        console.error('Failed to create CueForge app:', error);
-        
-        // Show basic error message
-        document.body.innerHTML = `
-            <div style="padding: 20px; text-align: center; color: red;">
-                <h1>CueForge Failed to Start</h1>
-                <p>Error: ${error.message}</p>
-                <p>Please check the browser console for more details.</p>
-                <button onclick="location.reload()">Reload</button>
-            </div>
-        `;
-    }
+// Create and start the application
+window.addEventListener('DOMContentLoaded', () => {
+    window.app = new CueForgeApp();
 });

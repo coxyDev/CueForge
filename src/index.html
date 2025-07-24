@@ -3,103 +3,372 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CueForge Professional Audio System</title>
+    <title>CueForge</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Main UI Structure (keeping existing) -->
-    <div id="app-container">
-        <header id="main-header">
-            <div class="header-left">
+    <div id="app">
+        <!-- Header Section -->
+        <header class="header">
+            <div class="header-section">
                 <h1>CueForge</h1>
-                <div class="audio-status">
-                    <span id="audio-status-indicator" class="status-inactive">Audio: Inactive</span>
+                <div class="show-info">
+                    <span id="show-name">Untitled Show</span>
+                    <span id="show-status" class="status-indicator stopped">●</span>
                 </div>
             </div>
-            <div class="header-center">
-                <div class="transport-controls">
-                    <button id="stop-all-btn" class="transport-btn" title="Stop All">⏹</button>
-                    <button id="panic-btn" class="transport-btn panic" title="Panic (Stop Everything)">🚨</button>
-                    <button id="go-btn" class="transport-btn go" title="GO!">GO</button>
-                </div>
-            </div>
-            <div class="header-right">
-                <div class="master-volume">
-                    <label for="master-volume">Master:</label>
-                    <input type="range" id="master-volume" min="0" max="1" step="0.01" value="0.7">
-                    <span id="master-volume-value">70%</span>
-                </div>
+            
+            <!-- Transport Controls -->
+            <div class="transport-controls">
+                <button id="go-btn" class="transport-btn go-btn" title="Go (Space)">
+                    <span>GO</span>
+                </button>
+                <button id="stop-btn" class="transport-btn stop-btn" title="Stop (Ctrl+.)">
+                    <span>■</span>
+                </button>
+                <button id="pause-btn" class="transport-btn pause-btn" title="Pause (Ctrl+P)">
+                    <span>⏸</span>
+                </button>
+                <button id="settings-btn" class="transport-btn settings-btn" title="Display Settings">
+                    <span>⚙</span>
+                </button>
+                <button id="media-browser-btn" class="transport-btn media-browser-btn" title="Media Browser">
+                    <span>📁 Media</span>
+                </button>
             </div>
         </header>
 
-        <main id="main-content">
-            <div id="workspace-container">
-                <div id="cue-list-panel" class="panel">
-                    <div class="panel-header">
-                        <h3>Cue List</h3>
-                        <div class="panel-controls">
-                            <button id="add-audio-cue" class="btn-small">+ Audio</button>
-                            <button id="add-video-cue" class="btn-small">+ Video</button>
-                            <button id="add-midi-cue" class="btn-small">+ MIDI</button>
-                            <button id="add-group-cue" class="btn-small">+ Group</button>
-                        </div>
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Cue List Section -->
+            <section class="cue-list-section">
+                <div class="section-header">
+                    <h2>Cue List</h2>
+                    <div class="cue-controls">
+                        <!-- Media Cues -->
+                        <button id="add-audio-cue" class="btn-small" title="Add Audio Cue (Ctrl+Shift+A)">🔊 Audio</button>
+                        <button id="add-video-cue" class="btn-small" title="Add Video Cue (Ctrl+Shift+V)">📹 Video</button>
+                        
+                        <!-- Basic Cues -->
+                        <button id="add-wait-cue" class="btn-small" title="Add Wait Cue (Ctrl+Shift+W)">⏱ Wait</button>
+                        <button id="add-group-cue" class="btn-small" title="Add Group Cue (Ctrl+Shift+G)">📁 Group</button>
+                        
+                        <!-- Control Cues -->
+                        <button id="add-start-cue" class="btn-small" title="Add Start Cue">▶ Start</button>
+                        <button id="add-stop-cue" class="btn-small" title="Add Stop Cue">⏹ Stop</button>
+                        <button id="add-goto-cue" class="btn-small" title="Add GoTo Cue">🎯 GoTo</button>
+                        <button id="add-fade-cue" class="btn-small" title="Add Fade Cue">📉 Fade</button>
+
+                        <!-- Professional Transport Cues -->
+                        <button id="add-load-cue" class="btn-small" title="Add Load Cue">📥 Load</button>
+                        <button id="add-reset-cue" class="btn-small" title="Add Reset Cue">🔄 Reset</button>
+                        <button id="add-target-cue" class="btn-small" title="Add Target Cue">🎯 Target</button>
+
+                        <!-- Control Cues -->
+                        <button id="add-arm-cue" class="btn-small" title="Add Arm Cue">🔓 Arm</button>
+                        <button id="add-disarm-cue" class="btn-small" title="Add Disarm Cue">🔒 Disarm</button>
+                        <button id="add-devamp-cue" class="btn-small" title="Add Devamp Cue">📤 Devamp</button>
+
+                        <!-- Documentation Cues -->
+                        <button id="add-memo-cue" class="btn-small" title="Add Memo Cue">📝 Memo</button>
+
+                        <!-- Technical Cues (for future) -->
+                        <button id="add-text-cue" class="btn-small" title="Add Text Cue">📄 Text</button>
+                        <button id="add-network-cue" class="btn-small" title="Add Network Cue">🌐 Network</button>
+                        <button id="add-midi-cue" class="btn-small" title="Add MIDI Cue">🎹 MIDI</button>
+                        <button id="add-light-cue" class="btn-small" title="Add Light Cue">💡 Light</button>
+                        
+                        <!-- Management -->
+                        <button id="delete-cue" class="btn-small btn-danger" title="Delete Selected Cue (Del)">🗑 Delete</button>
                     </div>
+                </div>
+                
+                <div class="cue-list-container">
+                    <!-- Enhanced Cue List Header with Target Column -->
+                    <div class="cue-list-header">
+                        <div>Number</div>
+                        <div>Name</div>
+                        <div>Type</div>
+                        <div>Target</div>
+                        <div>Duration</div>
+                        <div>Status</div>
+                    </div>
+                    
+                    <!-- Cue List Items -->
                     <div id="cue-list" class="cue-list">
                         <!-- Cues will be dynamically added here -->
                     </div>
                 </div>
+            </section>
 
-                <div id="inspector-panel" class="panel">
-                    <div class="panel-header">
-                        <h3>Inspector</h3>
-                        <button id="professional-audio-btn" class="btn-small professional" title="Professional Audio Settings">🎛️ Pro Audio</button>
-                    </div>
-                    <div id="inspector-content">
-                        <div id="no-selection-message">
-                            <p>Select a cue to view its properties</p>
-                        </div>
+            <!-- Inspector Section -->
+            <section class="inspector-section">
+                <div class="section-header">
+                    <h2>Inspector</h2>
+                    <div class="inspector-controls">
+                        <button class="btn-small" id="clear-target-btn" title="Clear Target">Clear Target</button>
                     </div>
                 </div>
-            </div>
+                
+                <div id="inspector-content" class="inspector-content">
+                    <div class="inspector-placeholder">
+                        Select a cue to view its properties
+                    </div>
+                </div>
+            </section>
         </main>
 
-        <footer id="status-bar">
+        <!-- Status Bar -->
+        <footer class="status-bar">
             <div class="status-left">
-                <span id="status-message">Ready</span>
+                <span id="cue-count">0 cues</span>
+                <span id="broken-cue-count" style="display: none;">0 broken</span>
             </div>
             <div class="status-right">
-                <span id="audio-performance">CPU: 0% | Mem: 0MB</span>
+                <span id="display-routing">Video: Preview</span>
+                <span id="current-time">00:00:00</span>
             </div>
         </footer>
     </div>
 
-    <!-- Modals (keeping existing ones) -->
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Display Settings</h2>
+                <button id="close-settings" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>Startup Preferences</h3>
+                    <div class="setting-item">
+                        <label>When CueForge starts:</label>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="startup-mode" id="startup-mode-template" value="template" checked>
+                                <span class="radio-label">Load sample template cues</span>
+                                <small>Start with example cues to help you get started</small>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="startup-mode" id="startup-mode-file" value="file">
+                                <span class="radio-label">Open specific show file</span>
+                                <small>Always open the same show file when starting</small>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="startup-mode" id="startup-mode-empty" value="empty">
+                                <span class="radio-label">Start with empty cue list</span>
+                                <small>Begin with a completely blank show</small>
+                            </label>
+                        </div>
+                        <div class="startup-file-selection" id="startup-file-selection">
+                            <label for="startup-file-path">Startup file:</label>
+                            <div class="file-input-group">
+                                <input type="text" id="startup-file-path" readonly placeholder="No file selected">
+                                <button type="button" id="select-startup-file" class="btn-small">Browse...</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Playback Settings</h3>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="single-cue-mode" checked>
+                            Single Cue Mode (only one cue can play at a time)
+                        </label>
+                        <small>When disabled, multiple cues can play simultaneously for layering effects</small>
+                    </div>
+                    <div class="setting-item">
+                        <label>
+                            <input type="checkbox" id="auto-continue-enabled" checked>
+                            Enable Auto-Continue
+                        </label>
+                        <small>Allow cues to automatically trigger the next cue</small>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Detected Displays</h3>
+                    <div id="displays-list">
+                        <p>Detecting displays...</p>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Video Output Routing</h3>
+                    <div class="setting-item">
+                        <label for="video-routing">Route video cues to:</label>
+                        <select id="video-routing">
+                            <option value="preview">Preview Window</option>
+                        </select>
+                    </div>
+                    <div class="setting-item">
+                        <button id="test-pattern-btn" class="btn-small">Show Test Pattern</button>
+                        <button id="clear-displays-btn" class="btn-small">Clear All Displays</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="refresh-displays" class="btn-small">Refresh Displays</button>
+                <button id="apply-settings" class="btn-primary">Apply Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Target Selection Modal -->
+    <div id="target-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="target-modal-title">Select Target</h2>
+                <button id="close-target-modal" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="target-modal-content">
+                    <!-- Content will be dynamically populated -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-target" class="btn-small">Cancel</button>
+                <button id="apply-target" class="btn-primary">Apply Target</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Professional Audio Settings Modal -->
+<div id="pro-audio-modal" class="modal" style="display: none;">
+    <div class="modal-content large-modal">
+        <div class="modal-header">
+            <h2>Professional Audio Settings</h2>
+            <button id="close-pro-audio-modal" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="pro-audio-tabs">
+                <div class="tab-bar">
+                    <button class="tab-btn active" data-tab="performance">Performance</button>
+                    <button class="tab-btn" data-tab="vst-settings">VST Settings</button>
+                    <button class="tab-btn" data-tab="asio-config">ASIO Config</button>
+                    <button class="tab-btn" data-tab="monitoring">Monitoring</button>
+                </div>
+                
+                <!-- Performance Tab -->
+                <div id="performance-tab" class="tab-content active">
+                    <h3>Performance Optimization</h3>
+                    <div class="setting-group">
+                        <label>Audio Buffer Size:</label>
+                        <select id="buffer-size-select">
+                            <option value="64">64 samples (Ultra Low Latency)</option>
+                            <option value="128">128 samples (Low Latency)</option>
+                            <option value="256" selected>256 samples (Balanced)</option>
+                            <option value="512">512 samples (Power Saving)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>Sample Rate:</label>
+                        <select id="sample-rate-select">
+                            <option value="44100">44.1 kHz</option>
+                            <option value="48000" selected>48 kHz</option>
+                            <option value="96000">96 kHz</option>
+                        </select>
+                    </div>
+                    
+                    <div class="performance-meters">
+                        <div class="meter-group">
+                            <label>CPU Usage:</label>
+                            <div class="performance-meter">
+                                <div class="meter-bar" id="cpu-meter"></div>
+                                <span class="meter-value" id="cpu-value">0%</span>
+                            </div>
+                        </div>
+                        
+                        <div class="meter-group">
+                            <label>Audio Dropouts:</label>
+                            <span id="dropout-count">0</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- VST Settings Tab -->
+                <div id="vst-settings-tab" class="tab-content">
+                    <h3>VST Plugin Configuration</h3>
+                    <div class="vst-paths-config">
+                        <h4>Scan Paths:</h4>
+                        <div id="vst-paths-list"></div>
+                        <button id="add-vst-path" class="btn-small">Add Path</button>
+                        <button id="rescan-vst" class="btn-primary">Rescan Plugins</button>
+                    </div>
+                    
+                    <div class="vst-plugin-list">
+                        <h4>Discovered Plugins:</h4>
+                        <div id="vst-plugin-grid"></div>
+                    </div>
+                </div>
+                
+                <!-- ASIO Config Tab -->
+                <div id="asio-config-tab" class="tab-content">
+                    <h3>ASIO Interface Configuration</h3>
+                    <div class="asio-device-selection">
+                        <label>ASIO Device:</label>
+                        <select id="asio-device-select">
+                            <option value="">No ASIO Device</option>
+                        </select>
+                        <button id="asio-control-panel" class="btn-small">Control Panel</button>
+                    </div>
+                    
+                    <div class="asio-channels">
+                        <h4>Channel Routing:</h4>
+                        <div id="asio-channel-map"></div>
+                    </div>
+                </div>
+                
+                <!-- Monitoring Tab -->
+                <div id="monitoring-tab" class="tab-content">
+                    <h3>Audio Monitoring</h3>
+                    <div class="monitoring-display">
+                        <div class="level-meters-grid" id="global-level-meters"></div>
+                        <div class="spectrum-analyzer" id="spectrum-display"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="reset-audio-settings" class="btn-small">Reset to Defaults</button>
+            <button id="apply-pro-audio-settings" class="btn-primary">Apply Settings</button>
+        </div>
+    </div>
+</div>
+
+    <!-- File Selection Modal for File Targets -->
     <div id="file-target-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="file-modal-title">Select Audio File</h2>
+                <h2>Select File Target</h2>
                 <button id="close-file-target-modal" class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="file-target-content">
+                <div class="file-target-section">
+                    <h3>Select Media File</h3>
                     <div class="file-drop-zone" id="file-drop-zone">
                         <div class="drop-zone-content">
-                            <div class="file-icon">📁</div>
-                            <p>Drop a file here or click to browse</p>
-                            <small id="accepted-formats">Accepted formats: MP3, WAV, AIFF, CAF, M4A, AAC</small>
+                            <div class="drop-zone-icon">📁</div>
+                            <div class="drop-zone-text">
+                                <p>Drop a file here or click to browse</p>
+                                <small id="accepted-formats">Accepted formats: MP3, WAV, AIFF, CAF, M4A, AAC</small>
+                            </div>
+                            <input type="file" id="file-input" accept="" style="display: none;">
+                            <button type="button" id="browse-file-btn" class="btn-primary">Browse Files</button>
                         </div>
-                        <input type="file" id="file-input" accept="" style="display: none;">
-                        <button type="button" id="browse-file-btn" class="btn-primary">Browse Files</button>
                     </div>
-                </div>
-                <div id="selected-file-info" style="display: none;">
-                    <h4>Selected File:</h4>
-                    <div class="file-info">
-                        <div class="file-icon">🎵</div>
-                        <div class="file-details">
-                            <div class="file-name" id="selected-file-name"></div>
-                            <div class="file-size" id="selected-file-size"></div>
-                            <div class="file-path" id="selected-file-path"></div>
+                    <div id="selected-file-info" style="display: none;">
+                        <h4>Selected File:</h4>
+                        <div class="file-info">
+                            <div class="file-icon">🎵</div>
+                            <div class="file-details">
+                                <div class="file-name" id="selected-file-name"></div>
+                                <div class="file-size" id="selected-file-size"></div>
+                                <div class="file-path" id="selected-file-path"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -111,122 +380,25 @@
         </div>
     </div>
 
-    <!-- Professional Audio Settings Modal -->
-    <div id="pro-audio-modal" class="modal" style="display: none;">
-        <div class="modal-content large-modal">
-            <div class="modal-header">
-                <h2>Professional Audio Settings</h2>
-                <button id="close-pro-audio-modal" class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="pro-audio-tabs">
-                    <div class="tab-bar">
-                        <button class="tab-btn active" data-tab="performance">Performance</button>
-                        <button class="tab-btn" data-tab="vst-settings">VST Settings</button>
-                        <button class="tab-btn" data-tab="monitoring">Monitoring</button>
-                    </div>
-                    
-                    <!-- Performance Tab -->
-                    <div id="performance-tab" class="tab-content active">
-                        <h3>Performance Optimization</h3>
-                        <div class="setting-group">
-                            <label>Audio Buffer Size:</label>
-                            <select id="buffer-size-select">
-                                <option value="64">64 samples (Ultra Low Latency)</option>
-                                <option value="128" selected>128 samples (Recommended)</option>
-                                <option value="256">256 samples (Safe)</option>
-                                <option value="512">512 samples (High Compatibility)</option>
-                            </select>
-                        </div>
-                        <div class="setting-group">
-                            <label>Sample Rate:</label>
-                            <select id="sample-rate-select">
-                                <option value="44100">44.1 kHz</option>
-                                <option value="48000" selected>48 kHz</option>
-                                <option value="96000">96 kHz</option>
-                                <option value="192000">192 kHz</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <!-- VST Settings Tab -->
-                    <div id="vst-settings-tab" class="tab-content">
-                        <h3>VST Plugin Management</h3>
-                        <div class="vst-controls">
-                            <button id="scan-vst-btn" class="btn-primary">Scan for VST Plugins</button>
-                            <button id="clear-vst-cache-btn" class="btn-small">Clear Cache</button>
-                        </div>
-                        <div id="vst-plugin-list" class="plugin-list">
-                            <p class="no-plugins">No VST plugins found. Click "Scan for VST Plugins" to search.</p>
-                        </div>
-                    </div>
-                    
-                    <!-- Monitoring Tab -->
-                    <div id="monitoring-tab" class="tab-content">
-                        <h3>System Monitoring</h3>
-                        <div class="monitoring-stats">
-                            <div class="stat-item">
-                                <label>CPU Usage:</label>
-                                <div class="stat-value" id="cpu-usage">0%</div>
-                            </div>
-                            <div class="stat-item">
-                                <label>Memory Usage:</label>
-                                <div class="stat-value" id="memory-usage">0 MB</div>
-                            </div>
-                            <div class="stat-item">
-                                <label>Audio Dropouts:</label>
-                                <div class="stat-value" id="dropout-count">0</div>
-                            </div>
-                        </div>
-                        <div class="monitoring-controls">
-                            <button id="reset-stats-btn" class="btn-small">Reset Statistics</button>
-                            <button id="force-gc-btn" class="btn-small">Force Garbage Collection</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="close-pro-audio" class="btn-small">Close</button>
-                <button id="apply-pro-audio" class="btn-primary">Apply Settings</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- CRITICAL: Scripts in correct dependency order to fix "already declared" and "not defined" errors -->
-    
-    <!-- Base Dependencies First -->
+    <!-- Scripts -->
     <script src="js/cue-manager.js"></script>
-    
-    <!-- Audio Core Components -->
     <script src="js/audio-performance-monitor.js"></script>
+    <script src="js/audio-patch-manager.js"></script>
+    <script src="js/matrix-mixer-enhanced.js"></script>
+    <script src="js/audio-output-patch.js"></script>
+    <script src="js/audio-effects.js"></script>
+    <script src="js/audio-cue.js"></script>
+    <script src="js/audio-cue-enhanced.js"></script>
+    <script src="js/audio-fade-automation.js"></script>
+    <script src="js/vst-integration.js"></script>
+    <script src="js/matrix-mixer-ui.js"></script>
     <script src="js/audio-dropout-detector.js"></script>
     <script src="js/memory-leak-monitor.js"></script>
     <script src="js/audio-recovery-manager.js"></script>
-    
-    <!-- Matrix & Routing (Load ONLY matrix-mixer-enhanced.js, NOT matrix-mixer-ui.js) -->
-    <script src="js/matrix-mixer-enhanced.js"></script>
-    <script src="js/audio-output-patch.js"></script>
-    <script src="js/audio-patch-manager.js"></script>
-    
-    <!-- Audio Effects & Processing -->
-    <script src="js/audio-effects.js"></script>
-    <script src="js/audio-fade-automation.js"></script>
-    <script src="js/vst-integration.js"></script>
-    
-    <!-- Audio Cues -->
-    <script src="js/audio-cue.js"></script>
-    <script src="js/audio-cue-enhanced.js"></script>
-    
-    <!-- Main Audio Engine (Requires all above dependencies) -->
     <script src="js/audio-engine.js"></script>
-    
-    <!-- UI Components -->
     <script src="js/audio-effects-manager.js"></script>
     <script src="js/ui-manager.js"></script>
-    
-    <!-- Main Application (Load Last) -->
     <script src="js/app.js"></script>
     <script src="js/media-browser.js"></script>
-
 </body>
 </html>
