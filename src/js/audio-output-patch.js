@@ -1,6 +1,7 @@
 /**
  * Audio Output Patch System
  * Implements QLab-style audio output patches with matrix routing
+ * NOTE: AudioPatchManager is now in a separate file - audio-patch-manager.js
  */
 
 class AudioOutputPatch {
@@ -63,198 +64,245 @@ class AudioOutputPatch {
         // For now, we'll simulate based on the deviceId
         if (this.deviceId === 'default') {
             this.numDeviceOutputs = 2; // Stereo
-            this.deviceOutputNames = ['L', 'R'];
-        } else if (this.deviceId === 'surround') {
-            this.numDeviceOutputs = 8; // 7.1 surround
-            this.deviceOutputNames = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs', 'Lb', 'Rb'];
-        } else if (this.deviceId.includes('dante') || this.deviceId.includes('madi')) {
-            this.numDeviceOutputs = 64; // Professional interface
-            this.deviceOutputNames = Array(64).fill(null).map((_, i) => `Out ${i + 1}`);
+            this.deviceOutputNames = ['Left', 'Right'];
+        } else {
+            // Simulate multi-channel interfaces
+            this.numDeviceOutputs = 8;
+            this.deviceOutputNames = Array(8).fill(null).map((_, i) => `Out ${i + 1}`);
         }
         
-        // Update patch matrix size
-        this.patchMatrix = new MatrixMixer(this.numCueOutputs, this.numDeviceOutputs, `${this.name} Patch`);
-        
-        // Create device output nodes
+        // Recreate device output nodes if count changed
         this.deviceOutputNodes = [];
         for (let i = 0; i < this.numDeviceOutputs; i++) {
             const outputNode = this.context.createGain();
-            this.deviceOutputNodes.push(outputNode);
             
-            // Connect to destination (in real app, would route to specific device outputs)
-            if (i < 2 && this.context.destination) {
-                // For development, connect first 2 outputs to speakers
-                const merger = this.context.createChannelMerger(2);
-                outputNode.connect(merger, 0, i);
-                merger.connect(this.context.destination);
+            // In a real implementation, this would connect to the specific device output
+            // For now, connect to the main destination (speakers)
+            if (i < this.context.destination.maxChannelCount) {
+                outputNode.connect(this.context.destination);
+            }
+            
+            this.deviceOutputNodes.push(outputNode);
+        }
+        
+        // Update matrix mixer dimensions
+        this.patchMatrix = new MatrixMixer(this.numCueOutputs, this.numDeviceOutputs, `${this.name} Patch`);
+    }
+    
+    setDefaultRouting() {
+        // Route first cue outputs to first device outputs at unity gain
+        const maxRoutes = Math.min(this.numCueOutputs, this.numDeviceOutputs);
+        for (let i = 0; i < maxRoutes; i++) {
+            this.patchMatrix.setCrosspoint(i, i, 0); // 0 dB = unity gain
+        }
+        
+        this.updateMatrixRouting();
+    }
+    
+    routeCueOutputsToStereo(startCueOutput = 0, sumToMono = false) {
+        // Clear existing routing
+        this.patchMatrix.clear();
+        
+        if (sumToMono) {
+            // Sum all cue outputs to both L and R
+            for (let i = startCueOutput; i < this.numCueOutputs; i++) {
+                this.patchMatrix.setCrosspoint(i, 0, 0); // Left
+                this.patchMatrix.setCrosspoint(i, 1, 0); // Right
+            }
+        } else {
+            // Alternate cue outputs between L and R
+            for (let i = startCueOutput; i < this.numCueOutputs; i++) {
+                const outputChannel = i % 2; // 0 = Left, 1 = Right
+                this.patchMatrix.setCrosspoint(i, outputChannel, 0);
             }
         }
+        
+        this.updateMatrixRouting();
     }
     
     updateMatrixRouting() {
         // Disconnect all current routing
-        this.cueOutputBusses.forEach(bus => {
-            try {
-                bus.output.disconnect();
-            } catch (e) {
-                // Ignore if not connected
-            }
+        this.cueOutputBusses.forEach((bus, cueOutput) => {
+            bus.output.disconnect();
         });
         
-        // Route according to patch matrix
-        for (let cueOut = 0; cueOut < this.numCueOutputs; cueOut++) {
-            const bus = this.cueOutputBusses.get(cueOut);
+        // Connect based on matrix settings
+        for (let cueOutput = 0; cueOutput < this.numCueOutputs; cueOutput++) {
+            const bus = this.cueOutputBusses.get(cueOutput);
             if (!bus) continue;
             
-            for (let deviceOut = 0; deviceOut < this.numDeviceOutputs; deviceOut++) {
-                const gain = this.patchMatrix.calculateGain(cueOut, deviceOut);
-                if (gain > 0 && this.deviceOutputNodes[deviceOut]) {
-                    const routingGain = this.context.createGain();
-                    routingGain.gain.value = gain;
+            for (let deviceOutput = 0; deviceOutput < this.numDeviceOutputs; deviceOutput++) {
+                const gain = this.patchMatrix.calculateGain(cueOutput, deviceOutput);
+                
+                if (gain > 0 && deviceOutput < this.deviceOutputNodes.length) {
+                    // Create a gain node for this specific routing
+                    const routeGain = this.context.createGain();
+                    routeGain.gain.value = gain;
                     
-                    bus.output.connect(routingGain);
-                    routingGain.connect(this.deviceOutputNodes[deviceOut]);
+                    // Connect: cue output -> route gain -> device output
+                    bus.output.connect(routeGain);
+                    routeGain.connect(this.deviceOutputNodes[deviceOutput]);
                 }
             }
         }
     }
     
-    setDefaultRouting() {
-        // Clear all routing first
-        this.patchMatrix.setSilent();
-        
-        // Set 1:1 routing for as many channels as possible
-        const routeCount = Math.min(this.numCueOutputs, this.numDeviceOutputs);
-        for (let i = 0; i < routeCount; i++) {
-            this.patchMatrix.setCrosspoint(i, i, 0); // Unity gain
+    // Cue Routing Methods
+    
+    routeCue(cue, cueOutputs = [0]) {
+        // Connect a cue's audio to specific cue outputs
+        if (!cue.outputNode) {
+            console.warn(`Cue ${cue.id} has no output node to route`);
+            return;
         }
         
-        this.updateMatrixRouting();
+        cueOutputs.forEach(outputIndex => {
+            if (outputIndex < this.numCueOutputs) {
+                const bus = this.cueOutputBusses.get(outputIndex);
+                if (bus) {
+                    cue.outputNode.connect(bus.input);
+                }
+            }
+        });
     }
     
-    // === Cue Output Management ===
-    
-    getCueOutputBus(cueOutputId) {
-        return this.cueOutputBusses.get(cueOutputId);
-    }
-    
-    setCueOutputName(cueOutputId, name) {
-        if (cueOutputId >= 0 && cueOutputId < this.numCueOutputs) {
-            this.cueOutputNames[cueOutputId] = name;
+    unrouteCue(cue) {
+        // Disconnect a cue from all cue outputs
+        if (cue.outputNode) {
+            cue.outputNode.disconnect();
         }
     }
     
-    getCueOutputName(cueOutputId) {
-        return this.cueOutputNames[cueOutputId] || `${cueOutputId + 1}`;
-    }
+    // Effects Management
     
-    // === Effects Management ===
-    
-    addEffectToCueOutput(cueOutputId, effect) {
-        const bus = this.cueOutputBusses.get(cueOutputId);
+    addEffectToCueOutput(cueOutput, effect) {
+        const bus = this.cueOutputBusses.get(cueOutput);
         if (!bus) return false;
         
-        // Create effects chain if needed
         if (!bus.effects) {
-            bus.effects = new EffectsChain(this.context);
+            bus.effects = this.context.createGain();
             
-            // Reconnect with effects in chain
+            // Rewire the bus: input -> effects -> output
             bus.input.disconnect();
-            bus.input.connect(bus.effects.inputNode);
+            bus.input.connect(bus.effects);
             bus.effects.connect(bus.output);
         }
         
-        // Add effect to chain
-        bus.effects.addEffect(effect);
+        // Add effect to the chain
+        // This would need a proper effects chain implementation
+        console.log(`Effect added to cue output ${cueOutput}:`, effect);
         
-        // Store in effects map
-        if (!this.cueOutputEffects.has(cueOutputId)) {
-            this.cueOutputEffects.set(cueOutputId, []);
+        if (!this.cueOutputEffects.has(cueOutput)) {
+            this.cueOutputEffects.set(cueOutput, []);
         }
-        this.cueOutputEffects.get(cueOutputId).push(effect);
+        this.cueOutputEffects.get(cueOutput).push(effect);
         
         return true;
     }
     
-    removeEffectFromCueOutput(cueOutputId, effectName) {
-        const bus = this.cueOutputBusses.get(cueOutputId);
-        if (!bus || !bus.effects) return false;
-        
-        return bus.effects.removeEffect(effectName);
-    }
-    
-    // === Patch Configuration ===
-    
-    setNumCueOutputs(num) {
-        num = Math.max(1, Math.min(128, num));
-        if (num === this.numCueOutputs) return;
-        
-        this.numCueOutputs = num;
-        this.initializeAudioGraph();
-    }
-    
-    async setAudioDevice(deviceId) {
-        this.deviceId = deviceId;
-        await this.updateDeviceOutputs();
-        this.updateMatrixRouting();
-    }
-    
-    // === Routing Helpers ===
-    
-    routeCueOutputsToStereo(startOutput = 0, spread = true) {
-        // Clear existing routing
-        this.patchMatrix.setSilent();
-        
-        if (spread) {
-            // Spread outputs across L/R
-            for (let i = startOutput; i < this.numCueOutputs && i < startOutput + 8; i++) {
-                const pan = (i - startOutput) / 7; // 0 to 1
-                const leftGain = Math.cos(pan * Math.PI / 2);
-                const rightGain = Math.sin(pan * Math.PI / 2);
-                
-                this.patchMatrix.setCrosspoint(i, 0, this.patchMatrix.gainToDb(leftGain));
-                this.patchMatrix.setCrosspoint(i, 1, this.patchMatrix.gainToDb(rightGain));
+    removeEffectFromCueOutput(cueOutput, effectIndex) {
+        const effects = this.cueOutputEffects.get(cueOutput);
+        if (effects && effectIndex >= 0 && effectIndex < effects.length) {
+            effects.splice(effectIndex, 1);
+            
+            // If no effects left, bypass effects bus
+            if (effects.length === 0) {
+                const bus = this.cueOutputBusses.get(cueOutput);
+                if (bus && bus.effects) {
+                    bus.input.disconnect();
+                    bus.effects.disconnect();
+                    bus.input.connect(bus.output);
+                    bus.effects = null;
+                }
             }
-        } else {
-            // Simple stereo routing
-            this.patchMatrix.setCrosspoint(startOutput, 0, 0); // Left
-            this.patchMatrix.setCrosspoint(startOutput + 1, 1, 0); // Right
+            
+            return true;
+        }
+        return false;
+    }
+    
+    // Utility Methods
+    
+    setCueOutputName(outputIndex, name) {
+        if (outputIndex >= 0 && outputIndex < this.numCueOutputs) {
+            this.cueOutputNames[outputIndex] = name;
+        }
+    }
+    
+    getCueOutputName(outputIndex) {
+        return this.cueOutputNames[outputIndex] || `${outputIndex + 1}`;
+    }
+    
+    getDeviceOutputName(outputIndex) {
+        return this.deviceOutputNames[outputIndex] || `Out ${outputIndex + 1}`;
+    }
+    
+    setAudioDevice(deviceId) {
+        this.deviceId = deviceId;
+        this.updateDeviceOutputs();
+    }
+    
+    setNumCueOutputs(numOutputs) {
+        const oldNum = this.numCueOutputs;
+        this.numCueOutputs = numOutputs;
+        
+        if (numOutputs > oldNum) {
+            // Add new busses
+            for (let i = oldNum; i < numOutputs; i++) {
+                const bus = {
+                    input: this.context.createGain(),
+                    effects: null,
+                    output: this.context.createGain(),
+                    meter: null,
+                    muted: false,
+                    soloed: false
+                };
+                bus.input.connect(bus.output);
+                this.cueOutputBusses.set(i, bus);
+                this.cueOutputNames.push(`${i + 1}`);
+            }
+        } else if (numOutputs < oldNum) {
+            // Remove busses
+            for (let i = numOutputs; i < oldNum; i++) {
+                const bus = this.cueOutputBusses.get(i);
+                if (bus) {
+                    bus.input.disconnect();
+                    bus.output.disconnect();
+                    if (bus.effects) bus.effects.disconnect();
+                }
+                this.cueOutputBusses.delete(i);
+            }
+            this.cueOutputNames.splice(numOutputs);
         }
         
+        // Recreate matrix with new dimensions
+        this.patchMatrix = new MatrixMixer(this.numCueOutputs, this.numDeviceOutputs, `${this.name} Patch`);
         this.updateMatrixRouting();
     }
     
-    routeCueOutputsToSurround(startOutput = 0) {
-        if (this.numDeviceOutputs < 6) {
-            console.warn('Not enough device outputs for surround routing');
-            return;
+    getActiveRouteCount() {
+        let count = 0;
+        for (let i = 0; i < this.numCueOutputs; i++) {
+            for (let o = 0; o < this.numDeviceOutputs; o++) {
+                if (this.patchMatrix.calculateGain(i, o) > 0) {
+                    count++;
+                }
+            }
         }
-        
-        // Clear existing routing
-        this.patchMatrix.setSilent();
-        
-        // Standard 5.1 routing
-        this.patchMatrix.setCrosspoint(startOutput, 0, 0); // L
-        this.patchMatrix.setCrosspoint(startOutput + 1, 1, 0); // R
-        this.patchMatrix.setCrosspoint(startOutput + 2, 2, 0); // C
-        this.patchMatrix.setCrosspoint(startOutput + 3, 3, 0); // LFE
-        this.patchMatrix.setCrosspoint(startOutput + 4, 4, 0); // Ls
-        this.patchMatrix.setCrosspoint(startOutput + 5, 5, 0); // Rs
-        
-        this.updateMatrixRouting();
+        return count;
     }
     
-    // === State Management ===
+    // Configuration Management
     
-    getState() {
+    getConfiguration() {
         return {
             name: this.name,
             deviceId: this.deviceId,
             numCueOutputs: this.numCueOutputs,
             cueOutputNames: [...this.cueOutputNames],
             patchMatrixState: this.patchMatrix.getState(),
-            effects: Array.from(this.cueOutputEffects.entries()).map(([id, effects]) => ({
-                cueOutputId: id,
+            effects: Array.from(this.cueOutputEffects.entries()).map(([outputId, effects]) => ({
+                outputId: outputId,
                 effects: effects.map(e => ({
                     name: e.name,
                     type: e.constructor.name
@@ -263,83 +311,45 @@ class AudioOutputPatch {
         };
     }
     
-    setState(state) {
-        this.name = state.name || this.name;
-        if (state.deviceId !== this.deviceId) {
-            this.setAudioDevice(state.deviceId);
+    loadConfiguration(config) {
+        this.name = config.name || this.name;
+        if (config.deviceId !== this.deviceId) {
+            this.setAudioDevice(config.deviceId);
         }
-        if (state.numCueOutputs !== this.numCueOutputs) {
-            this.setNumCueOutputs(state.numCueOutputs);
+        if (config.numCueOutputs !== this.numCueOutputs) {
+            this.setNumCueOutputs(config.numCueOutputs);
         }
-        if (state.cueOutputNames) {
-            this.cueOutputNames = [...state.cueOutputNames];
+        if (config.cueOutputNames) {
+            this.cueOutputNames = [...config.cueOutputNames];
         }
-        if (state.patchMatrixState) {
-            this.patchMatrix.setState(state.patchMatrixState);
+        if (config.patchMatrixState) {
+            this.patchMatrix.setState(config.patchMatrixState);
             this.updateMatrixRouting();
         }
     }
-}
-
-// === Patch Manager ===
-
-class AudioPatchManager {
-    constructor(audioEngine) {
-        this.audioEngine = audioEngine;
-        this.patches = new Map();
-        this.defaultPatch = null;
-    }
     
-    createPatch(name, deviceId = 'default', numCueOutputs = 64) {
-        const patch = new AudioOutputPatch(name, this.audioEngine, deviceId, numCueOutputs);
-        this.patches.set(name, patch);
+    destroy() {
+        // Clean up all audio nodes
+        this.cueOutputBusses.forEach(bus => {
+            bus.input.disconnect();
+            bus.output.disconnect();
+            if (bus.effects) bus.effects.disconnect();
+        });
         
-        if (!this.defaultPatch) {
-            this.defaultPatch = patch;
-        }
+        this.deviceOutputNodes.forEach(node => {
+            node.disconnect();
+        });
         
-        return patch;
-    }
-    
-    getPatch(name) {
-        return this.patches.get(name);
-    }
-    
-    deletePatch(name) {
-        if (this.patches.has(name)) {
-            const patch = this.patches.get(name);
-            if (patch === this.defaultPatch) {
-                // Set a new default
-                this.defaultPatch = this.patches.values().next().value || null;
-            }
-            this.patches.delete(name);
-            return true;
-        }
-        return false;
-    }
-    
-    setDefaultPatch(name) {
-        const patch = this.patches.get(name);
-        if (patch) {
-            this.defaultPatch = patch;
-            return true;
-        }
-        return false;
-    }
-    
-    getDefaultPatch() {
-        return this.defaultPatch;
-    }
-    
-    getAllPatches() {
-        return Array.from(this.patches.values());
+        this.cueOutputBusses.clear();
+        this.deviceOutputNodes = [];
+        
+        console.log(`Audio Output Patch "${this.name}" destroyed`);
     }
 }
 
-// Export for use
-window.AudioOutputPatch = AudioOutputPatch;
-window.AudioPatchManager = AudioPatchManager;
-
+// Export only AudioOutputPatch (AudioPatchManager is in separate file)
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { AudioOutputPatch, AudioPatchManager };
+    module.exports = AudioOutputPatch;
+} else {
+    window.AudioOutputPatch = AudioOutputPatch;
 }

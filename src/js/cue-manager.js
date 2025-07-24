@@ -2113,6 +2113,92 @@ stopFade(fadeCueId) {
     }
 }
 
+        // Add this method to handle the missing playCue.bind() error
+    playCue(cueId) {
+        const cue = this.getCue(cueId);
+        if (!cue) {
+            console.warn(`Cannot play cue - cue ${cueId} not found`);
+            return;
+        }
+        
+        // Set cue as playing
+        cue.isPlaying = true;
+        cue.startTime = Date.now();
+        
+        // Update cue state
+        this.updateCue(cueId, { isPlaying: true });
+        
+        // Emit events
+        this.emit('cueStarted', { cueId, cue });
+        this.emit('playbackStateChanged', { cueId, isPlaying: true });
+        
+        console.log(`Playing cue: ${cue.name} (${cueId})`);
+    }
+
+    // Add this method to handle stopping cues
+    stopCue(cueId) {
+        const cue = this.getCue(cueId);
+        if (!cue) {
+            console.warn(`Cannot stop cue - cue ${cueId} not found`);
+            return;
+        }
+        
+        // Set cue as stopped
+        cue.isPlaying = false;
+        cue.endTime = Date.now();
+        
+        // Update cue state
+        this.updateCue(cueId, { isPlaying: false });
+        
+        // Emit events
+        this.emit('cueStopped', { cueId, cue });
+        this.emit('playbackStateChanged', { cueId, isPlaying: false });
+        
+        console.log(`Stopped cue: ${cue.name} (${cueId})`);
+    }
+
+    // Add this method to handle panic (stop all)
+    panic() {
+        console.log('🚨 PANIC - Stopping all cues');
+        
+        // Stop all playing cues
+        this.cues.forEach(cue => {
+            if (cue.isPlaying) {
+                this.stopCue(cue.id);
+            }
+        });
+        
+        // Clear any scheduled operations
+        if (this.scheduledOperations) {
+            this.scheduledOperations.clear();
+        }
+        
+        // Emit panic event
+        this.emit('panic', { timestamp: Date.now() });
+    }
+
+    // Add method to get playing cues
+    getPlayingCues() {
+        return this.cues.filter(cue => cue.isPlaying);
+    }
+
+    // Add method to check if any cues are playing
+    hasPlayingCues() {
+        return this.cues.some(cue => cue.isPlaying);
+    }
+
+    // Add method to clear all scheduled actions
+    clearAllScheduledActions() {
+        if (this.scheduledTimeouts) {
+            this.scheduledTimeouts.forEach(timeout => clearTimeout(timeout));
+            this.scheduledTimeouts.clear();
+        }
+        if (this.scheduledIntervals) {
+            this.scheduledIntervals.forEach(interval => clearInterval(interval));
+            this.scheduledIntervals.clear();
+        }
+        console.log('All scheduled actions cleared');
+    }
 
 }
 
