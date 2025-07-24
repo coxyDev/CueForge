@@ -1,6 +1,56 @@
+/**
+ * Professional Audio Engine with Enhanced Features
+ * Extends AudioEngineWithFades to provide QLab-level capabilities
+ */
+
+// First, ensure the base AudioEngineWithFades exists
+if (typeof AudioEngineWithFades === 'undefined') {
+    // Fallback base class if AudioEngineWithFades is not available
+    class AudioEngineWithFades {
+        constructor() {
+            this.audioContext = null;
+            this.masterGainNode = null;
+            this.cues = new Map();
+            this.initialized = false;
+            this.masterVolume = 0.7;
+        }
+        
+        async initializeAudioContext() {
+            try {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGainNode = this.audioContext.createGain();
+                this.masterGainNode.connect(this.audioContext.destination);
+                this.masterGainNode.gain.value = this.masterVolume;
+                this.initialized = true;
+                console.log('Base audio context initialized');
+            } catch (error) {
+                console.error('Failed to initialize audio context:', error);
+                throw error;
+            }
+        }
+        
+        async createAudioCue(id, filePath) {
+            // Basic cue creation - will be enhanced by ProfessionalAudioEngine
+            const cue = new AudioCue(id, this, filePath);
+            this.cues.set(id, cue);
+            return cue;
+        }
+        
+        stopAllCues() {
+            this.cues.forEach(cue => {
+                if (cue.isPlaying) {
+                    cue.stop();
+                }
+            });
+        }
+    }
+}
+
 class ProfessionalAudioEngine extends AudioEngineWithFades {
     constructor() {
         super();
+        
+        console.log('🎬 Initializing Professional Audio Engine...');
         
         // VST Management
         this.vstManager = new VSTManager();
@@ -8,95 +58,261 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
         // Enhanced matrix UI components
         this.matrixUIs = new Map();
         
-        // Performance monitoring
-        this.performanceMonitor = new AudioPerformanceMonitor(this);
+        // Performance monitoring (Initialize AFTER ensuring dependencies exist)
+        this.performanceMonitor = null;
+        this.dropoutDetector = null;
+        this.memoryMonitor = null;
+        this.recoveryManager = null;
         
-        // Initialize Patch Manager
-        this.patchManager = new AudioPatchManager(this);
-
-        this.setupCriticalErrorHandling();
+        // Initialize Patch Manager (will be created after audio context)
+        this.patchManager = null;
         
-        console.log('🎛️ Professional Audio Engine with VST support initialized');
+        console.log('🎛️ Professional Audio Engine constructed');
     }
     
     async initializeAudioContext() {
-        await super.initializeAudioContext();
+        console.log('Initializing Professional Audio Context...');
         
-        // Initialize VST scanning
-        if (this.vstManager) {
-            this.vstManager.scanForPlugins((progress) => {
-                console.log(`VST Scan: ${progress.phase} - ${Math.round(progress.progress * 100)}%`);
-            });
+        try {
+            // Call parent initialization
+            await super.initializeAudioContext();
+            
+            // Initialize monitoring components AFTER audio context is ready
+            this.initializeMonitoring();
+            
+            // Initialize Patch Manager
+            if (typeof AudioPatchManager !== 'undefined') {
+                this.patchManager = new AudioPatchManager(this);
+                this.createDefaultPatches();
+            } else {
+                console.warn('AudioPatchManager not available');
+            }
+            
+            // Initialize VST scanning
+            if (this.vstManager) {
+                this.vstManager.scanForPlugins((progress) => {
+                    console.log(`VST Scan: ${progress.phase} - ${Math.round(progress.progress * 100)}%`);
+                });
+            }
+            
+            console.log('✅ Professional Audio Engine initialized successfully');
+            
+        } catch (error) {
+            console.error('❌ Failed to initialize Professional Audio Engine:', error);
+            throw error;
         }
-        
-        // Create default audio patches
-        this.createDefaultPatches();
+    }
+    
+    initializeMonitoring() {
+        try {
+            // Performance monitoring
+            if (typeof AudioPerformanceMonitor !== 'undefined') {
+                this.performanceMonitor = new AudioPerformanceMonitor(this);
+                console.log('✅ Performance monitor initialized');
+            } else {
+                console.warn('AudioPerformanceMonitor not available');
+            }
+            
+            // Setup critical error handling
+            this.setupCriticalErrorHandling();
+            
+        } catch (error) {
+            console.error('Failed to initialize monitoring:', error);
+        }
+    }
+    
+    setupCriticalErrorHandling() {
+        try {
+            // Audio dropout detection
+            if (typeof AudioDropoutDetector !== 'undefined' && this.audioContext) {
+                this.dropoutDetector = new AudioDropoutDetector(this.audioContext);
+                console.log('✅ Dropout detector initialized');
+            } else {
+                console.warn('AudioDropoutDetector not available or no audio context');
+            }
+            
+            // Memory leak monitoring
+            if (typeof MemoryLeakMonitor !== 'undefined') {
+                this.memoryMonitor = new MemoryLeakMonitor();
+                this.memoryMonitor.startMonitoring();
+                console.log('✅ Memory monitor initialized');
+            } else {
+                console.warn('MemoryLeakMonitor not available');
+            }
+            
+            // Automatic recovery procedures
+            if (typeof AudioRecoveryManager !== 'undefined') {
+                this.recoveryManager = new AudioRecoveryManager(this);
+                console.log('✅ Recovery manager initialized');
+            } else {
+                console.warn('AudioRecoveryManager not available');
+            }
+            
+            console.log('✅ Critical error handling initialized');
+            
+        } catch (error) {
+            console.error('Failed to setup error handling:', error);
+        }
     }
 
     createDefaultPatches() {
-    // Create main output patch
-    const mainPatch = this.patchManager.createPatch('Main', 'default', 64);
-        mainPatch.setDefaultRouting();
+        if (!this.patchManager) {
+            console.warn('Cannot create default patches - patchManager not available');
+            return;
+        }
         
-        // Create monitor output patch
-        const monitorPatch = this.patchManager.createPatch('Monitor', 'default', 16);
-        monitorPatch.routeCueOutputsToStereo(0, false);
-        
-        console.log('✅ Default audio patches created');
+        try {
+            // Create main output patch
+            const mainPatch = this.patchManager.createPatch('Main', 'default', 64);
+            mainPatch.setDefaultRouting();
+            
+            // Create monitor output patch
+            const monitorPatch = this.patchManager.createPatch('Monitor', 'default', 16);
+            monitorPatch.routeCueOutputsToStereo(0, false);
+            
+            console.log('✅ Default audio patches created');
+        } catch (error) {
+            console.error('Failed to create default patches:', error);
+        }
     }
-
-    setupCriticalErrorHandling() {
-    // Audio dropout detection
-    this.dropoutDetector = new AudioDropoutDetector(this.audioContext);
-    
-    // Memory leak monitoring
-    this.memoryMonitor = new MemoryLeakMonitor();
-    this.memoryMonitor.startMonitoring();
-    
-    // Automatic recovery procedures
-    this.recoveryManager = new AudioRecoveryManager(this);
-    
-    console.log('✅ Critical error handling initialized');
-}
     
     /**
      * Create enhanced audio cue with full professional features
      */
-  async createAudioCue(id, filePath) {
-        // Use enhanced audio cue if available
-        if (typeof AudioCueEnhanced !== 'undefined') {
-            const cue = new AudioCueEnhanced(id, this, filePath);
-            this.cues.set(id, cue);
-            return cue;
-        } else {
-            // Fallback to regular AudioCue
-            const cue = new AudioCue(id, this, filePath);
-            this.cues.set(id, cue);
+    async createAudioCue(id, filePath) {
+        try {
+            // Use enhanced audio cue if available
+            if (typeof AudioCueEnhanced !== 'undefined') {
+                const cue = new AudioCueEnhanced(id, this, filePath);
+                this.cues.set(id, cue);
+                
+                // Add VST support
+                cue.vstPlugins = new Map();
+                
+                // Enhanced effects chain
+                if (typeof EffectsChain !== 'undefined') {
+                    cue.effectsChain = new EffectsChain(this.audioContext);
+                }
+                
+                // Professional matrix mixer UI
+                cue.matrixUI = null;
+                
+                // Performance optimization
+                cue.audioWorkletProcessor = await this.createAudioWorklet(id);
+                
+                return cue;
+            } else {
+                // Fallback to regular AudioCue
+                const cue = await super.createAudioCue(id, filePath);
+                
+                // Create effects chain for compatibility
+                if (typeof ProfessionalAudioManager !== 'undefined') {
+                    const effectsManager = new ProfessionalAudioManager(this);
+                    const effectsChain = effectsManager.createEffectsChain(id);
+                    if (cue.connectEffectsChain) {
+                        cue.connectEffectsChain(effectsChain);
+                    }
+                }
+                
+                return cue;
+            }
+        } catch (error) {
+            console.error('Failed to create audio cue:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Load VST plugin for cue
+     */
+    async loadVSTForCue(cueId, pluginId) {
+        const cue = this.getCue(cueId);
+        if (!cue) throw new Error(`Cue not found: ${cueId}`);
+        
+        try {
+            const vstPlugin = await this.vstManager.loadPlugin(pluginId, this.audioContext);
+            cue.vstPlugins.set(pluginId, vstPlugin);
             
-            // Create effects chain for compatibility
-            if (window.ProfessionalAudioManager) {
-                const effectsManager = new ProfessionalAudioManager(this);
-                const effectsChain = effectsManager.createEffectsChain(id);
-                cue.connectEffectsChain(effectsChain);
+            // Add to effects chain
+            if (cue.effectsChain) {
+                cue.effectsChain.addEffect(vstPlugin);
             }
             
-            return cue;
+            return vstPlugin;
+        } catch (error) {
+            console.error('Failed to load VST plugin:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Create matrix mixer UI
+     */
+    createMatrixUI(cue, container) {
+        if (typeof MatrixMixerUI === 'undefined') {
+            console.warn('MatrixMixerUI not available');
+            return null;
+        }
+        
+        try {
+            if (cue.matrixUI) {
+                cue.matrixUI.destroy();
+            }
+            
+            cue.matrixUI = new MatrixMixerUI(container, cue.cueMatrix, {
+                showMeters: true,
+                enableVSTSupport: true,
+                enableGangs: true,
+                colorScheme: 'professional'
+            });
+            
+            this.matrixUIs.set(cue.id, cue.matrixUI);
+            return cue.matrixUI;
+        } catch (error) {
+            console.error('Failed to create matrix UI:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Audio worklet for high-performance processing
+     */
+    async createAudioWorklet(cueId) {
+        try {
+            await this.audioContext.audioWorklet.addModule('/js/audio-worklet-processor.js');
+            
+            const workletNode = new AudioWorkletNode(this.audioContext, 'professional-audio-processor', {
+                processorOptions: { cueId }
+            });
+            
+            return workletNode;
+        } catch (error) {
+            console.warn('AudioWorklet not supported, using fallback processing');
+            return null;
         }
     }
 
-        createOutputPatch(name, deviceId = 'default', numCueOutputs = 64) {
+    // Patch Management Methods
+    createOutputPatch(name, deviceId = 'default', numCueOutputs = 64) {
+        if (!this.patchManager) {
+            console.warn('Patch manager not available');
+            return null;
+        }
         return this.patchManager.createPatch(name, deviceId, numCueOutputs);
     }
 
     getOutputPatch(name) {
+        if (!this.patchManager) return null;
         return this.patchManager.getPatch(name);
     }
 
     getAllOutputPatches() {
+        if (!this.patchManager) return [];
         return this.patchManager.getAllPatches();
     }
 
     setDefaultOutputPatch(patchName) {
+        if (!this.patchManager) return false;
         return this.patchManager.setDefaultPatch(patchName);
     }
 
@@ -130,196 +346,45 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
     getFileUrl(filePath) {
         if (!filePath) return null;
         
-        if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('blob:')) {
+        // If already a URL, return as-is
+        if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('file://')) {
             return filePath;
         }
         
-        if (filePath.startsWith('file://')) {
-            return filePath;
-        }
+        // Convert file path to URL
+        const normalizedPath = filePath.replace(/\\/g, '/');
         
-        let normalizedPath = filePath.replace(/\\/g, '/');
-        
-        if (/^[A-Z]:/i.test(normalizedPath)) {
+        // Handle Windows paths
+        if (normalizedPath.match(/^[A-Z]:/i)) {
             return `file:///${normalizedPath}`;
         }
         
-        if (!normalizedPath.startsWith('/')) {
-            normalizedPath = '/' + normalizedPath;
+        // Handle Unix-style paths
+        if (normalizedPath.startsWith('/')) {
+            return `file://${normalizedPath}`;
         }
         
+        // For relative paths
         return `file://${normalizedPath}`;
     }
-    
+
     /**
-     * Load VST plugin for cue
+     * Show critical error to user
      */
-    async loadVSTForCue(cueId, pluginId) {
-        const cue = this.getCue(cueId);
-        if (!cue) throw new Error(`Cue not found: ${cueId}`);
+    showCriticalError(message) {
+        console.error('🚨 Critical Audio Error:', message);
         
-        const vstPlugin = await this.vstManager.loadPlugin(pluginId, this.audioContext);
-        cue.vstPlugins.set(pluginId, vstPlugin);
-        
-        // Add to effects chain
-        cue.effectsChain.addEffect(vstPlugin);
-        
-        return vstPlugin;
-    }
-    
-    /**
-     * Create matrix mixer UI
-     */
-    createMatrixUI(cue, container) {
-        if (cue.matrixUI) {
-            cue.matrixUI.destroy();
+        // Try to show user-friendly error
+        if (typeof alert !== 'undefined') {
+            alert(`Critical Audio Error:\n\n${message}\n\nPlease save your work and restart the application.`);
         }
         
-        cue.matrixUI = new MatrixMixerUI(container, cue.cueMatrix, {
-            showMeters: true,
-            enableVSTSupport: true,
-            enableGangs: true,
-            colorScheme: 'professional'
-        });
-        
-        this.matrixUIs.set(cue.id, cue.matrixUI);
-        return cue.matrixUI;
-    }
-
-    /**
- * Optimize for live performance
- */
-enableLiveMode() {
-    // Reduce audio buffer size for lower latency
-    this.setLatencyOptimization('ultra-low');
-    
-    // Pre-load all audio files
-    this.preloadAllAudioFiles();
-    
-    // Enable audio worklets for better performance
-    this.enableAudioWorklets();
-    
-    // Disable non-essential features
-    this.disableNonEssentialFeatures();
-    
-    console.log('🎪 Live performance mode enabled');
-}
-
-/**
- * Pre-load audio files to prevent dropouts
- */
-async preloadAllAudioFiles() {
-    const preloadPromises = [];
-    
-    this.cues.forEach(cue => {
-        if (cue.filePath && !cue.audioBuffer) {
-            preloadPromises.push(cue.loadAudioFile(cue.filePath));
+        // Emit event for UI handling
+        if (window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent('criticalAudioError', {
+                detail: { message }
+            }));
         }
-    });
-    
-    await Promise.all(preloadPromises);
-    console.log(`Preloaded ${preloadPromises.length} audio files`);
-}
-
-/**
- * Error recovery system
- */
-setupErrorRecovery() {
-    // Audio context state monitoring
-    this.audioContext.addEventListener('statechange', () => {
-        if (this.audioContext.state === 'suspended') {
-            console.warn('Audio context suspended, attempting recovery...');
-            this.recoverAudioContext();
-        }
-    });
-    
-    // Global error handler for audio operations
-    window.addEventListener('unhandledrejection', (event) => {
-        if (event.reason && event.reason.message?.includes('audio')) {
-            console.error('Audio error caught:', event.reason);
-            this.handleAudioError(event.reason);
-        }
-    });
-}
-
-async recoverAudioContext() {
-    try {
-        await this.audioContext.resume();
-        console.log('✅ Audio context recovered');
-        
-        // Reconnect all cues
-        this.cues.forEach(cue => {
-            if (cue.isPlaying) {
-                cue.stop();
-                setTimeout(() => cue.play(), 100);
-            }
-        });
-        
-    } catch (error) {
-        console.error('Failed to recover audio context:', error);
-        this.showCriticalError('Audio system recovery failed');
-    }
-}
-
-showCriticalError(message) {
-    console.error('🚨 Critical Error:', message);
-    
-    // Show in UI if available
-    if (window.uiManager && window.uiManager.showStatusMessage) {
-        window.uiManager.showStatusMessage(message, 'error');
-    }
-    
-    // Show system alert as fallback
-    if (window.alert) {
-        window.alert(`Critical Audio Error:\n\n${message}\n\nPlease save your work and restart the application.`);
-    }
-}
-
-    /**
-     * Audio worklet for high-performance processing
-     */
-    async createAudioWorklet(cueId) {
-        try {
-            await this.audioContext.audioWorklet.addModule('/js/audio-worklet-processor.js');
-            
-            const workletNode = new AudioWorkletNode(this.audioContext, 'professional-audio-processor', {
-                processorOptions: { cueId }
-            });
-            
-            return workletNode;
-        } catch (error) {
-            console.warn('AudioWorklet not supported, using fallback processing');
-            return null;
-        }
-    }
-
-    /**
- * Clean up resources when destroying the audio engine
- */
-    destroy() {
-        // Stop all monitoring
-        if (this.dropoutDetector) {
-            this.dropoutDetector.stopMonitoring();
-        }
-        
-        if (this.memoryMonitor) {
-            this.memoryMonitor.stopMonitoring();
-        }
-        
-        // Stop all cues
-        this.stopAllCues();
-        
-        // Disconnect all nodes
-        if (this.masterGainNode) {
-            this.masterGainNode.disconnect();
-        }
-        
-        // Close audio context
-        if (this.audioContext) {
-            this.audioContext.close();
-        }
-        
-        console.log('Audio engine destroyed');
     }
 
     /**
@@ -342,4 +407,75 @@ showCriticalError(message) {
             console.warn('Non-critical audio error:', error);
         }
     }
+
+    /**
+     * Get performance statistics
+     */
+    getPerformanceStats() {
+        const stats = {
+            cpu: 0,
+            memory: 0,
+            dropouts: 0,
+            activeVoices: 0,
+            latency: 0
+        };
+        
+        if (this.performanceMonitor) {
+            const monitorStats = this.performanceMonitor.getStats();
+            stats.cpu = monitorStats.cpuUsage;
+            stats.memory = monitorStats.memoryUsage;
+            stats.activeVoices = monitorStats.activeVoices;
+            stats.latency = monitorStats.latency;
+        }
+        
+        if (this.dropoutDetector) {
+            stats.dropouts = this.dropoutDetector.getDropoutCount();
+        }
+        
+        return stats;
+    }
+
+    /**
+     * Clean up resources when destroying the audio engine
+     */
+    destroy() {
+        console.log('Destroying Professional Audio Engine...');
+        
+        // Stop all monitoring
+        if (this.dropoutDetector) {
+            this.dropoutDetector.stopMonitoring();
+        }
+        
+        if (this.memoryMonitor) {
+            this.memoryMonitor.stopMonitoring();
+        }
+        
+        // Stop all cues
+        this.stopAllCues();
+        
+        // Clean up matrix UIs
+        this.matrixUIs.forEach(ui => {
+            if (ui.destroy) ui.destroy();
+        });
+        this.matrixUIs.clear();
+        
+        // Disconnect all nodes
+        if (this.masterGainNode) {
+            this.masterGainNode.disconnect();
+        }
+        
+        // Close audio context
+        if (this.audioContext && this.audioContext.state !== 'closed') {
+            this.audioContext.close();
+        }
+        
+        console.log('✅ Professional Audio Engine destroyed');
+    }
+}
+
+// Export the class
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = ProfessionalAudioEngine;
+} else {
+    window.ProfessionalAudioEngine = ProfessionalAudioEngine;
 }

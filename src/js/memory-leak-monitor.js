@@ -1,54 +1,72 @@
 /**
  * Memory Leak Monitor
- * Tracks memory usage and detects potential leaks in the audio system
+ * Tracks memory usage and detects potential leaks
  */
 class MemoryLeakMonitor {
     constructor() {
         this.isMonitoring = false;
-        this.monitorInterval = null;
-        this.memorySnapshots = [];
-        this.maxSnapshots = 60; // Keep 5 minutes of history at 5-second intervals
-        this.leakThreshold = 50 * 1024 * 1024; // 50MB threshold
-        this.leakCallbacks = [];
-        this.warningIssued = false;
+        this.monitoringInterval = null;
+        this.checkInterval = 30000; // 30 seconds
+        this.maxSnapshots = 20;
         
-        // Track specific resources
-        this.audioBuffers = new WeakMap();
-        this.audioNodes = new WeakMap();
+        // Memory snapshots
+        this.memorySnapshots = [];
+        
+        // Resource tracking
+        this.audioBuffers = new Map();
+        this.audioNodes = new Map();
         this.resourceCounts = {
             audioBuffers: 0,
-            audioNodes: 0,
-            vstPlugins: 0,
-            timers: 0
+            audioNodes: 0
         };
+        
+        // Leak detection thresholds
+        this.thresholds = {
+            memoryGrowthMB: 50,     // MB growth per minute
+            heapUsagePercent: 85,   // % of total heap
+            resourceCount: 1000     // Max audio resources
+        };
+        
+        // Callbacks for leak detection
+        this.leakCallbacks = [];
+        
+        console.log('Memory Leak Monitor initialized');
     }
     
-    startMonitoring(interval = 5000) {
-        if (this.isMonitoring) return;
+    startMonitoring() {
+        if (this.isMonitoring) {
+            console.warn('Memory monitoring already active');
+            return;
+        }
         
         this.isMonitoring = true;
-        console.log('🔍 Memory leak monitoring started');
+        console.log('Starting memory leak monitoring...');
         
-        this.monitorInterval = setInterval(() => {
-            this.checkMemory();
-        }, interval);
+        this.monitoringInterval = setInterval(() => {
+            this.takeMemorySnapshot();
+            this.analyzeMemoryTrends();
+        }, this.checkInterval);
         
         // Take initial snapshot
-        this.checkMemory();
+        this.takeMemorySnapshot();
     }
     
     stopMonitoring() {
-        if (this.monitorInterval) {
-            clearInterval(this.monitorInterval);
-            this.monitorInterval = null;
-        }
+        if (!this.isMonitoring) return;
+        
         this.isMonitoring = false;
+        
+        if (this.monitoringInterval) {
+            clearInterval(this.monitoringInterval);
+            this.monitoringInterval = null;
+        }
+        
         console.log('Memory leak monitoring stopped');
     }
     
-    checkMemory() {
+    takeMemorySnapshot() {
         if (!performance.memory) {
-            console.warn('Performance.memory API not available');
+            console.warn('Performance memory API not available');
             return;
         }
         
@@ -67,53 +85,55 @@ class MemoryLeakMonitor {
             this.memorySnapshots.shift();
         }
         
-        // Check for potential leaks
-        this.detectLeaks();
+        console.log(`Memory snapshot: ${Math.round(snapshot.usedJSHeapSize / 1024 / 1024)}MB used`);
     }
     
-    detectLeaks() {
-        if (this.memorySnapshots.length < 10) return; // Need enough data
+    analyzeMemoryTrends() {
+        if (this.memorySnapshots.length < 2) return;
         
-        // Check memory growth over time
-        const oldSnapshot = this.memorySnapshots[0];
-        const currentSnapshot = this.memorySnapshots[this.memorySnapshots.length - 1];
-        const memoryGrowth = currentSnapshot.usedJSHeapSize - oldSnapshot.usedJSHeapSize;
+        const current = this.memorySnapshots[this.memorySnapshots.length - 1];
+        const previous = this.memorySnapshots[this.memorySnapshots.length - 2];
         
         // Calculate growth rate
-        const timeElapsed = (currentSnapshot.timestamp - oldSnapshot.timestamp) / 1000; // seconds
-        const growthRate = memoryGrowth / timeElapsed; // bytes per second
+        const timeDiff = (current.timestamp - previous.timestamp) / 1000 / 60; // minutes
+        const memoryDiff = (current.usedJSHeapSize - previous.usedJSHeapSize) / 1024 / 1024; // MB
+        const growthRate = memoryDiff / timeDiff;
         
-        // Check if we're approaching heap limit
-        const heapUsagePercent = (currentSnapshot.usedJSHeapSize / currentSnapshot.jsHeapSizeLimit) * 100;
+        // Check for rapid memory growth
+        if (growthRate > this.thresholds.memoryGrowthMB) {
+            this.notifyPotentialLeak({
+                type: 'rapid-growth',
+                growthRate: growthRate,
+                currentUsage: current.usedJSHeapSize / 1024 / 1024,
+                timestamp: current.timestamp
+            });
+        }
         
-        if (memoryGrowth > this.leakThreshold) {
-            this.onPotentialLeak({
-                memoryGrowth,
-                growthRate,
-                heapUsagePercent,
-                currentUsage: currentSnapshot.usedJSHeapSize,
-                timeElapsed
+        // Check heap usage percentage
+        const heapUsagePercent = (current.usedJSHeapSize / current.jsHeapSizeLimit) * 100;
+        if (heapUsagePercent > this.thresholds.heapUsagePercent) {
+            this.notifyMemoryWarning({
+                type: 'high-heap-usage',
+                heapUsagePercent: heapUsagePercent,
+                currentUsage: current.usedJSHeapSize / 1024 / 1024,
+                heapLimit: current.jsHeapSizeLimit / 1024 / 1024
             });
-        } else if (heapUsagePercent > 80 && !this.warningIssued) {
-            this.onMemoryWarning({
-                heapUsagePercent,
-                currentUsage: currentSnapshot.usedJSHeapSize,
-                limit: currentSnapshot.jsHeapSizeLimit
+        }
+        
+        // Check resource counts
+        const totalResources = current.resourceCounts.audioBuffers + current.resourceCounts.audioNodes;
+        if (totalResources > this.thresholds.resourceCount) {
+            this.notifyMemoryWarning({
+                type: 'high-resource-count',
+                resourceCount: totalResources,
+                breakdown: current.resourceCounts
             });
-            this.warningIssued = true;
-        } else if (heapUsagePercent < 70) {
-            this.warningIssued = false;
         }
     }
     
-    onPotentialLeak(leakInfo) {
-        console.error('⚠️ Potential memory leak detected:', {
-            growth: `${(leakInfo.memoryGrowth / 1024 / 1024).toFixed(2)} MB`,
-            rate: `${(leakInfo.growthRate / 1024).toFixed(2)} KB/s`,
-            heapUsage: `${leakInfo.heapUsagePercent.toFixed(1)}%`
-        });
+    notifyPotentialLeak(leakInfo) {
+        console.warn('🔴 Potential memory leak detected:', leakInfo);
         
-        // Notify listeners
         this.leakCallbacks.forEach(callback => {
             if (callback.onLeak) {
                 callback.onLeak(leakInfo);
@@ -121,14 +141,9 @@ class MemoryLeakMonitor {
         });
     }
     
-    onMemoryWarning(warningInfo) {
-        console.warn('⚠️ High memory usage:', {
-            usage: `${warningInfo.heapUsagePercent.toFixed(1)}%`,
-            current: `${(warningInfo.currentUsage / 1024 / 1024).toFixed(2)} MB`,
-            limit: `${(warningInfo.limit / 1024 / 1024).toFixed(2)} MB`
-        });
+    notifyMemoryWarning(warningInfo) {
+        console.warn('🟡 Memory warning:', warningInfo);
         
-        // Notify listeners
         this.leakCallbacks.forEach(callback => {
             if (callback.onWarning) {
                 callback.onWarning(warningInfo);
@@ -136,7 +151,6 @@ class MemoryLeakMonitor {
         });
     }
     
-    // Resource tracking methods
     trackAudioBuffer(buffer) {
         this.audioBuffers.set(buffer, Date.now());
         this.resourceCounts.audioBuffers++;
