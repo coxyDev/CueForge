@@ -1518,31 +1518,27 @@ showGroupNameDialog(defaultName, callback) {
 
     // ==================== ENHANCED INSPECTOR ====================
 
-    updateInspector() {
-        const selectedCues = this.cueManager.getSelectedCues();
-        
-        if (!this.elements.inspectorContent) return;
-        
-        if (selectedCues.length === 0) {
-            this.elements.inspectorContent.innerHTML = `
-                <div class="inspector-placeholder">
-                    Select a cue to view its properties
-                </div>
-            `;
-            return;
-        }
+    updateInspector(cue) {
+    let html = '';
 
-        if (selectedCues.length === 1) {
-            // Single cue selection - show detailed inspector
-            this.updateSingleCueInspector(selectedCues[0]);
-        } else {
-            // Multiple cue selection - show multi-cue inspector
-            this.updateMultiCueInspector(selectedCues);
-        }
+    // Show appropriate inspector based on cue type 
+    switch (cue.type) {
+        case 'audio':
+            html += this.generateAudioInspectorWithLevels(cue);
+            break;
+        case 'video':
+            html += this.generateVideoInspector(cue);
+            break;
+        case 'text':
+            html += this.generateTextInspector(cue);
+            break;
+        // ... other cue types
+        default:
+            html += `<p>No inspector for cue type: ${cue.type}</p>`;
+    }
 
-        if (cue.type === 'audio') {
-            this.initializeAudioMatrixUI(cue);
-        }
+    // Update inspector content
+    this.inspectorContent.innerHTML = html;
     }
 
     updateSingleCueInspector(cue) {
