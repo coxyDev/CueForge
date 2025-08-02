@@ -47,6 +47,13 @@ class CueForgeApp {
     }
 
     async initializeCoreComponents() {
+        // Initialize API Bridge
+        console.log('Initializing Audio Engine API Bridge...');
+        this.audioEngineAPI = new AudioEngineAPI();
+
+        // Test API with stub data
+        await this.testAPIBridge();
+
         // Initialize Professional Audio Engine
         console.log('Initializing Professional Audio Engine...');
         
@@ -89,6 +96,37 @@ class CueForgeApp {
         this.setupAudioPlayback();
         
         console.log('✅ Core components initialized');
+    }
+
+    async testAPIBridge() {
+        try {
+            // Test basic API functionality
+            console.log('🧪 Testing Audio Engine API...');
+            
+            // Initialize system
+            const initResult = await this.audioEngineAPI.initializeAudioSystem();
+            console.log('Init result:', initResult);
+            
+            // Get system status
+            const status = await this.audioEngineAPI.getSystemStatus();
+            console.log('System status:', status);
+            
+            // Get available devices
+            const devices = await this.audioEngineAPI.getAudioDevices();
+            console.log('Available devices:', devices);
+            
+            // Test cue creation
+            const cueResult = await this.audioEngineAPI.createAudioCue(
+                'test-cue-001', 
+                'C:\\Audio\\test.wav'
+            );
+            console.log('Cue creation result:', cueResult);
+            
+            console.log('✅ API Bridge test completed successfully');
+            
+        } catch (error) {
+            console.error('❌ API Bridge test failed:', error);
+        }
     }
 
     setupAudioPlayback() {

@@ -47,8 +47,7 @@
     "fs-extra": "^11.1.1",
     "lodash": "^4.17.21",
     "uuid": "^9.0.1",
-    "web-audio-api": "^0.2.2",
-    "audio-worklet": "^1.0.0"
+    "web-audio-api": "^0.2.2"
   },
   "build": {
     "appId": "com.joelcox.cueforge",
@@ -61,6 +60,7 @@
       "main.js",
       "preload.js",
       "src/**/*",
+      "src/api/*",
       "assets/**/*",
       "node_modules/**/*",
       "package.json",
