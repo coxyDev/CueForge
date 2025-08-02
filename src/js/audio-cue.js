@@ -1,40 +1,47 @@
 /**
- * Audio Cue Class
- * Handles audio file playback and controls for individual cues
+ * Enhanced Audio Cue with Professional Matrix Routing
+ * Implements QLab-style two-stage audio routing
  */
 
-class AudioCue {
+class AudioCueEnhanced {
     constructor(id, audioEngine, filePath = null) {
         this.id = id;
         this.audioEngine = audioEngine;
         this.audioContext = audioEngine.audioContext;
         
-        // Audio nodes
-        this.audioBuffer = null;
-        this.sourceNode = null;
-        this.gainNode = null;
-        this.panNode = null;
-        
-        // State
+        // Audio file properties
         this.filePath = filePath;
+        this.audioBuffer = null;
+        this.numChannels = 0;
+        this.sampleRate = 44100;
+        this.duration = 0;
+        this.isLoaded = false;
+        
+        // Cue matrix mixer: routes file channels to cue outputs
+        this.cueMatrix = null; // Will be created when file loads
+        
+        // Output patch assignment
+        this.outputPatch = null;
+        this.assignDefaultOutputPatch();
+        
+        // Playback state
+        this.sourceNode = null;
         this.isPlaying = false;
         this.isPaused = false;
-        this.isLoaded = false;
         this.startTime = 0;
         this.pauseTime = 0;
-        this.currentTime = 0;
+        
+        // Audio nodes for routing
+        this.inputSplitter = null;
+        this.outputNodes = new Map(); // cueOutputId -> GainNode
         
         // Settings
-        this.volume = 1.0;
-        this.pan = 0;
+        this.volume = 1.0; // Master volume
         this.loop = false;
         this.playbackRate = 1.0;
         
-        // Effects chain connection point
-        this.effectsChain = null;
-        
-        // Initialize nodes
-        this.initializeNodes();
+        // Trim (post-fader) levels
+        this.trimLevels = new Map(); // cueOutputId -> dB
         
         // Load file if provided
         if (filePath) {
@@ -42,28 +49,22 @@ class AudioCue {
         }
     }
     
-    initializeNodes() {
-        // Create gain node for volume control
-        this.gainNode = this.audioContext.createGain();
-        this.gainNode.gain.value = this.volume;
-        
-        // Create stereo panner for pan control
-        if (this.audioContext.createStereoPanner) {
-            this.panNode = this.audioContext.createStereoPanner();
-            this.panNode.pan.value = this.pan;
-        } else {
-            // Fallback for older browsers
-            this.panNode = this.audioContext.createPanner();
-            this.panNode.panningModel = 'equalpower';
-            this.setPannerPosition(this.pan);
+    assignDefaultOutputPatch() {
+        // Assign the default output patch
+        if (this.audioEngine.patchManager) {
+            this.outputPatch = this.audioEngine.patchManager.getDefaultPatch();
+        }
+    }
+    
+    setOutputPatch(patch) {
+        if (this.isPlaying) {
+            console.warn('Cannot change output patch while playing');
+            return false;
         }
         
-        // Connect nodes: source -> gain -> pan -> destination
-        this.gainNode.connect(this.panNode);
-        
-        // Connect to effects chain if available, otherwise to engine output
-        const destination = this.effectsChain?.inputNode || this.audioEngine.getOutputNode();
-        this.panNode.connect(destination);
+        this.outputPatch = patch;
+        this.reconnectOutputs();
+        return true;
     }
     
     async loadAudioFile(filePath) {
@@ -90,9 +91,22 @@ class AudioCue {
             
             // Decode audio data
             this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            this.numChannels = this.audioBuffer.numberOfChannels;
+            this.sampleRate = this.audioBuffer.sampleRate;
+            this.duration = this.audioBuffer.duration;
             this.isLoaded = true;
             
-            console.log(`✅ Audio loaded: ${filePath} (${this.audioBuffer.duration.toFixed(2)}s)`);
+            // Create cue matrix based on file channels
+            const numCueOutputs = this.outputPatch ? this.outputPatch.numCueOutputs : 64;
+            this.cueMatrix = new MatrixMixer(this.numChannels, numCueOutputs, `Cue ${this.id}`);
+            
+            // Set default routing
+            this.setDefaultCueRouting();
+            
+            // Initialize audio graph
+            this.initializeAudioGraph();
+            
+            console.log(`✅ Audio loaded: ${filePath} (${this.numChannels}ch, ${this.duration.toFixed(2)}s)`);
             return true;
             
         } catch (error) {
@@ -100,6 +114,64 @@ class AudioCue {
             this.isLoaded = false;
             throw error;
         }
+    }
+    
+    setDefaultCueRouting() {
+        if (!this.cueMatrix) return;
+        
+        // Clear all routing first
+        this.cueMatrix.setSilent();
+        
+        // Default routing based on channel count
+        if (this.numChannels === 1) {
+            // Mono: route to outputs 1 & 2
+            this.cueMatrix.setCrosspoint(0, 0, 0); // Ch1 -> Out1
+            this.cueMatrix.setCrosspoint(0, 1, 0); // Ch1 -> Out2
+        } else if (this.numChannels === 2) {
+            // Stereo: 1:1 routing
+            this.cueMatrix.setCrosspoint(0, 0, 0); // L -> Out1
+            this.cueMatrix.setCrosspoint(1, 1, 0); // R -> Out2
+        } else {
+            // Multi-channel: 1:1 for as many as possible
+            for (let i = 0; i < this.numChannels && i < this.cueMatrix.numOutputs; i++) {
+                this.cueMatrix.setCrosspoint(i, i, 0);
+            }
+        }
+    }
+    
+    initializeAudioGraph() {
+        if (!this.isLoaded || !this.outputPatch) return;
+        
+        // Create splitter for input channels
+        this.inputSplitter = this.audioContext.createChannelSplitter(this.numChannels);
+        
+        // Create output nodes for each cue output that's being used
+        this.outputNodes.clear();
+        const activeRoutes = this.cueMatrix.getActiveRoutes();
+        const usedOutputs = new Set(activeRoutes.map(r => r.output));
+        
+        usedOutputs.forEach(outputId => {
+            const gainNode = this.audioContext.createGain();
+            this.outputNodes.set(outputId, gainNode);
+        });
+        
+        this.reconnectOutputs();
+    }
+    
+    reconnectOutputs() {
+        if (!this.outputPatch) return;
+        
+        // Connect cue outputs to patch cue inputs
+        this.outputNodes.forEach((gainNode, cueOutputId) => {
+            const patchBus = this.outputPatch.getCueOutputBus(cueOutputId);
+            if (patchBus) {
+                try {
+                    gainNode.disconnect();
+                } catch (e) {}
+                
+                gainNode.connect(patchBus.input);
+            }
+        });
     }
     
     async play() {
@@ -123,8 +195,11 @@ class AudioCue {
             this.sourceNode.loop = this.loop;
             this.sourceNode.playbackRate.value = this.playbackRate;
             
-            // Connect source to gain
-            this.sourceNode.connect(this.gainNode);
+            // Connect to splitter
+            this.sourceNode.connect(this.inputSplitter);
+            
+            // Route audio based on cue matrix
+            this.updateAudioRouting();
             
             // Set up ended handler
             this.sourceNode.onended = () => {
@@ -151,6 +226,54 @@ class AudioCue {
         }
     }
     
+    updateAudioRouting() {
+        if (!this.inputSplitter || !this.cueMatrix) return;
+        
+        // Clear existing connections from splitter
+        for (let i = 0; i < this.numChannels; i++) {
+            try {
+                this.inputSplitter.disconnect(i);
+            } catch (e) {}
+        }
+        
+        // Create routing based on cue matrix
+        const activeRoutes = this.cueMatrix.getActiveRoutes();
+        
+        activeRoutes.forEach(route => {
+            const inputChannel = route.input;
+            const cueOutput = route.output;
+            const gain = route.gain;
+            
+            // Get or create output node
+            if (!this.outputNodes.has(cueOutput)) {
+                const gainNode = this.audioContext.createGain();
+                this.outputNodes.set(cueOutput, gainNode);
+                
+                // Connect to patch
+                const patchBus = this.outputPatch?.getCueOutputBus(cueOutput);
+                if (patchBus) {
+                    gainNode.connect(patchBus.input);
+                }
+            }
+            
+            const outputNode = this.outputNodes.get(cueOutput);
+            
+            // Create gain node for this route
+            const routeGain = this.audioContext.createGain();
+            routeGain.gain.value = gain * this.volume;
+            
+            // Apply trim if set
+            const trimDb = this.trimLevels.get(cueOutput) || 0;
+            if (trimDb !== 0) {
+                routeGain.gain.value *= this.cueMatrix.dbToGain(trimDb);
+            }
+            
+            // Connect: splitter[input] -> routeGain -> outputNode
+            this.inputSplitter.connect(routeGain, inputChannel);
+            routeGain.connect(outputNode);
+        });
+    }
+    
     pause() {
         if (!this.isPlaying || this.isPaused) return;
         
@@ -163,7 +286,6 @@ class AudioCue {
     
     resume() {
         if (!this.isPaused) return;
-        
         this.play();
     }
     
@@ -178,11 +300,17 @@ class AudioCue {
             this.sourceNode = null;
         }
         
+        // Disconnect routing
+        if (this.inputSplitter) {
+            try {
+                this.inputSplitter.disconnect();
+            } catch (e) {}
+        }
+        
         this.isPlaying = false;
         if (resetTime) {
             this.isPaused = false;
             this.pauseTime = 0;
-            this.currentTime = 0;
         }
         
         console.log(`⏹️ Stopped audio cue: ${this.id}`);
@@ -195,50 +323,67 @@ class AudioCue {
             this.stop(false);
         }
         
-        this.pauseTime = Math.max(0, Math.min(time, this.getDuration()));
+        this.pauseTime = Math.max(0, Math.min(time, this.duration));
         
         if (wasPlaying) {
             this.play();
         }
     }
     
-    getCurrentTime() {
-        if (this.isPlaying && !this.isPaused) {
-            return this.audioContext.currentTime - this.startTime;
-        }
-        return this.pauseTime;
-    }
-    
-    getDuration() {
-        return this.audioBuffer ? this.audioBuffer.duration : 0;
-    }
+    // === Level Controls ===
     
     setVolume(volume) {
         this.volume = Math.max(0, Math.min(1, volume));
-        if (this.gainNode) {
-            this.gainNode.gain.value = this.volume;
+        
+        if (this.isPlaying) {
+            this.updateAudioRouting();
         }
     }
     
-    setPan(pan) {
-        this.pan = Math.max(-1, Math.min(1, pan));
-        
-        if (this.panNode) {
-            if (this.panNode.pan) {
-                this.panNode.pan.value = this.pan;
-            } else {
-                this.setPannerPosition(this.pan);
+    setMainLevel(levelDb) {
+        if (this.cueMatrix) {
+            this.cueMatrix.setMainLevel(levelDb);
+            if (this.isPlaying) {
+                this.updateAudioRouting();
             }
         }
     }
     
-    setPannerPosition(pan) {
-        // Convert pan (-1 to 1) to 3D position
-        const x = pan;
-        const y = 0;
-        const z = 1 - Math.abs(pan);
-        this.panNode.setPosition(x, y, z);
+    setInputLevel(input, levelDb) {
+        if (this.cueMatrix) {
+            this.cueMatrix.setInputLevel(input, levelDb);
+            if (this.isPlaying) {
+                this.updateAudioRouting();
+            }
+        }
     }
+    
+    setOutputLevel(output, levelDb) {
+        if (this.cueMatrix) {
+            this.cueMatrix.setOutputLevel(output, levelDb);
+            if (this.isPlaying) {
+                this.updateAudioRouting();
+            }
+        }
+    }
+    
+    setCrosspoint(input, output, levelDb) {
+        if (this.cueMatrix) {
+            this.cueMatrix.setCrosspoint(input, output, levelDb);
+            if (this.isPlaying) {
+                this.updateAudioRouting();
+            }
+        }
+    }
+    
+    setTrimLevel(cueOutput, levelDb) {
+        this.trimLevels.set(cueOutput, levelDb);
+        if (this.isPlaying) {
+            this.updateAudioRouting();
+        }
+    }
+    
+    // === Playback Controls ===
     
     setPlaybackRate(rate) {
         this.playbackRate = Math.max(0.25, Math.min(4, rate));
@@ -254,45 +399,80 @@ class AudioCue {
         }
     }
     
-    // Connect to effects chain
-    connectEffectsChain(effectsChain) {
-        this.effectsChain = effectsChain;
-        
-        // Reconnect audio path
-        this.panNode.disconnect();
-        this.panNode.connect(effectsChain.inputNode);
-        effectsChain.connect(this.audioEngine.getOutputNode());
+    // === Gang Controls ===
+    
+    createGang(members) {
+        if (this.cueMatrix) {
+            return this.cueMatrix.createGang(members);
+        }
+        return null;
     }
     
-    // Release resources
+    // === State Management ===
+    
+    getCurrentTime() {
+        if (this.isPlaying && !this.isPaused) {
+            return this.audioContext.currentTime - this.startTime;
+        }
+        return this.pauseTime;
+    }
+    
+    getDuration() {
+        return this.duration;
+    }
+    
+    getState() {
+        return {
+            id: this.id,
+            filePath: this.filePath,
+            volume: this.volume,
+            loop: this.loop,
+            playbackRate: this.playbackRate,
+            outputPatchName: this.outputPatch?.name,
+            cueMatrixState: this.cueMatrix?.getState(),
+            trimLevels: Array.from(this.trimLevels.entries())
+        };
+    }
+    
+    setState(state) {
+        if (state.volume !== undefined) this.volume = state.volume;
+        if (state.loop !== undefined) this.loop = state.loop;
+        if (state.playbackRate !== undefined) this.playbackRate = state.playbackRate;
+        
+        if (state.outputPatchName && this.audioEngine.patchManager) {
+            const patch = this.audioEngine.patchManager.getPatch(state.outputPatchName);
+            if (patch) this.setOutputPatch(patch);
+        }
+        
+        if (state.cueMatrixState && this.cueMatrix) {
+            this.cueMatrix.setState(state.cueMatrixState);
+        }
+        
+        if (state.trimLevels) {
+            this.trimLevels = new Map(state.trimLevels);
+        }
+    }
+    
+    // === Cleanup ===
+    
     destroy() {
         this.stop();
         
-        if (this.gainNode) {
-            this.gainNode.disconnect();
-        }
+        this.outputNodes.forEach(node => {
+            try {
+                node.disconnect();
+            } catch (e) {}
+        });
         
-        if (this.panNode) {
-            this.panNode.disconnect();
-        }
-        
+        this.outputNodes.clear();
         this.audioBuffer = null;
         this.isLoaded = false;
-    }
-    
-    // For compatibility with memory monitor
-    releaseBuffer() {
-        if (!this.isPlaying) {
-            this.audioBuffer = null;
-            this.isLoaded = false;
-            console.log(`Released audio buffer for cue: ${this.id}`);
-        }
     }
 }
 
 // Export for use
-window.AudioCue = AudioCue;
+window.AudioCueEnhanced = AudioCueEnhanced;
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = AudioCue;
+    module.exports = AudioCueEnhanced;
 }
