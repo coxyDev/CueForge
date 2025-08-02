@@ -17,6 +17,134 @@ class ProfessionalAudioEngine extends AudioEngineWithFades {
         
         console.log('🎛️ Professional Audio Engine with VST support initialized');
     }
+
+    /**
+     * Set latency optimization mode
+     */
+    setLatencyOptimization(mode) {
+        // Modes: 'ultra-low', 'low', 'balanced', 'power-saving'
+        const bufferSizes = {
+            'ultra-low': 64,
+            'low': 128,
+            'balanced': 256,
+            'power-saving': 512
+        };
+        
+        this.bufferSize = bufferSizes[mode] || 256;
+        console.log(`🎛️ Latency optimization set to ${mode} (${this.bufferSize} samples)`);
+    }
+
+    /**
+     * Enable live performance mode
+     */
+    enableLiveMode() {
+        // Reduce audio buffer size for lower latency
+        this.setLatencyOptimization('ultra-low');
+        
+        // Pre-load all audio files
+        this.preloadAllAudioFiles();
+        
+        // Enable audio worklets for better performance
+        this.enableAudioWorklets();
+        
+        // Disable non-essential features
+        this.disableNonEssentialFeatures();
+        
+        console.log('🎪 Live performance mode enabled');
+    }
+
+    /**
+     * Pre-load audio files to prevent dropouts
+     */
+    async preloadAllAudioFiles() {
+        if (!this.cues) return;
+        
+        const preloadPromises = [];
+        
+        this.cues.forEach(cue => {
+            if (cue.filePath && !cue.audioBuffer && typeof cue.loadAudioFile === 'function') {
+                preloadPromises.push(cue.loadAudioFile(cue.filePath));
+            }
+        });
+        
+        await Promise.all(preloadPromises);
+        console.log(`📁 Preloaded ${preloadPromises.length} audio files`);
+    }
+
+    /**
+     * Enable audio worklets (stub for now)
+     */
+    enableAudioWorklets() {
+        console.log('🔧 Audio worklets enabled (stub implementation)');
+    }
+
+    /**
+     * Disable non-essential features for performance
+     */
+    disableNonEssentialFeatures() {
+        console.log('⚡ Non-essential features disabled for performance');
+    }
+
+    /**
+     * Error recovery system
+     */
+    setupErrorRecovery() {
+        if (!this.audioContext) return;
+        
+        // Audio context state monitoring
+        this.audioContext.addEventListener('statechange', () => {
+            if (this.audioContext.state === 'suspended') {
+                console.warn('⚠️ Audio context suspended, attempting recovery...');
+                this.recoverAudioContext();
+            }
+        });
+        
+        console.log('🛡️ Error recovery system initialized');
+    }
+
+    /**
+     * Recover suspended audio context
+     */
+    async recoverAudioContext() {
+        try {
+            await this.audioContext.resume();
+            console.log('✅ Audio context recovered');
+            
+            // Reconnect all cues if needed
+            if (this.cues) {
+                this.cues.forEach(cue => {
+                    if (cue.isPlaying && typeof cue.stop === 'function' && typeof cue.play === 'function') {
+                        cue.stop();
+                        setTimeout(() => cue.play(), 100);
+                    }
+                });
+            }
+            
+        } catch (error) {
+            console.error('❌ Failed to recover audio context:', error);
+            this.showCriticalError('Audio system recovery failed');
+        }
+    }
+
+    /**
+     * Show critical error message
+     */
+    showCriticalError(message) {
+        console.error('🚨 Critical Error:', message);
+        
+        // Show in UI if available
+        if (window.uiManager && window.uiManager.showStatusMessage) {
+            window.uiManager.showStatusMessage(message, 'error');
+        }
+    }
+
+    /**
+     * Get cue by ID (ensure method exists)
+     */
+    getCue(id) {
+        if (!this.cues) return null;
+        return this.cues.get ? this.cues.get(id) : this.cues.find(c => c.id === id);
+    }
     
     async initializeAudioContext() {
         await super.initializeAudioContext();

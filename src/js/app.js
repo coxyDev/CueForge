@@ -130,73 +130,37 @@ class CueForgeApp {
     }
 
     setupAudioPlayback() {
-        // Override cue manager's play method to use audio engine
-        const originalPlay = this.cueManager.playCue.bind(this.cueManager);
-        
-        this.cueManager.playCue = async (cueId) => {
-            const cue = this.cueManager.getCue(cueId);
-            if (!cue) return;
-            
-            if (cue.type === 'audio' && cue.fileTarget) {
-                try {
-                    // Ensure audio context is running
-                    await this.audioEngine.ensureAudioContext();
-                    
-                    // Create or get audio cue from engine
-                    let audioCue = this.audioEngine.getCue(cueId);
-                    if (!audioCue) {
-                        audioCue = await this.audioEngine.createAudioCue(cueId, cue.fileTarget);
-                    }
-                    
-                    // Play the audio
-                    if (audioCue && audioCue.play) {
-                        await audioCue.play();
-                        cue.isPlaying = true;
-                        
-                        // Update UI
-                        if (this.uiManager) {
-                            this.uiManager.updateCueDisplay(cueId);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to play audio cue:', error);
-                    this.uiManager.showStatusMessage(`Failed to play audio: ${error.message}`, 'error');
-                }
-            } else {
-                // Use original play method for non-audio cues
-                originalPlay(cueId);
-            }
-        };
-        
-        // Override stop method
-        const originalStop = this.cueManager.stopCue.bind(this.cueManager);
-        
-        this.cueManager.stopCue = (cueId) => {
-            const cue = this.cueManager.getCue(cueId);
-            if (!cue) return;
-            
-            if (cue.type === 'audio') {
-                const audioCue = this.audioEngine.getCue(cueId);
-                if (audioCue && audioCue.stop) {
-                    audioCue.stop();
-                }
-            }
-            
-            originalStop(cueId);
-        };
-        
-        // Override panic (stop all)
-        const originalPanic = this.cueManager.panic.bind(this.cueManager);
-        
-        this.cueManager.panic = () => {
-            // Stop all audio cues
-            if (this.audioEngine && this.audioEngine.stopAllCues) {
-                this.audioEngine.stopAllCues();
-            }
-            
-            originalPanic();
-        };
+    // Ensure cueManager exists and has playCue method
+    if (!this.cueManager || typeof this.cueManager.playCue !== 'function') {
+        console.warn('⚠️ CueManager not properly initialized, skipping audio playback setup');
+        return;
     }
+    
+    // Override play method to use audio engine
+    const originalPlay = this.cueManager.playCue.bind(this.cueManager);
+    
+    this.cueManager.playCue = async (cueId) => {
+        const cue = this.cueManager.getCue(cueId);
+        if (!cue) {
+            console.warn(`Cue not found: ${cueId}`);
+            return;
+        }
+        
+        try {
+            // Use the audio engine to play the cue
+            if (this.audioEngine && typeof this.audioEngine.playCue === 'function') {
+                await this.audioEngine.playCue(cueId);
+            } else {
+                // Fallback to original method
+                await originalPlay(cueId);
+            }
+        } catch (error) {
+            console.error('Failed to play cue:', error);
+        }
+    };
+    
+    console.log('🔗 Audio playback setup completed');
+}
 
     setupGlobalReferences() {
         // Set global references for modal interactions and debugging
