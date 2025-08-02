@@ -161,3 +161,6 @@ docs/build/
 # Electron forge
 .webpack/
 .vite/
+
+# JUCE files
+native/third_party/JUCE

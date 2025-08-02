@@ -11,13 +11,16 @@
     "build:portable": "electron-builder --win portable",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",
-     "build:audio": "webpack --config webpack.audio.config.js",
+    "build:audio": "webpack --config webpack.audio.config.js",
+    "build:native": "cmake-js rebuild --runtime=electron --runtime-version=28.0.0",
+    "build:native:debug": "cmake-js rebuild --debug --runtime=electron --runtime-version=28.0.0",
+    "install": "npm run build:native",
     "test:audio": "node tests/audio-engine-tests.js",
     "benchmark:audio": "node tests/performance-benchmarks.js",
     "dist": "npm run build",
     "pack": "electron-builder --dir",
     "clean": "rimraf dist build",
-    "rebuild": "electron-rebuild",
+    "rebuild": "electron-rebuild && npm run build:native",
     "postinstall": "electron-builder install-app-deps"
   },
   "repository": {
@@ -41,7 +44,10 @@
     "electron": "^27.0.0",
     "electron-builder": "^24.13.3",
     "electron-rebuild": "^3.2.9",
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.5",
+    "cmake-js": "^7.2.1",
+    "node-addon-api": "^7.0.0",
+    "node-gyp": "^10.0.1"
   },
   "dependencies": {
     "fs-extra": "^11.1.1",
@@ -55,6 +61,12 @@
     "directories": {
       "output": "dist",
       "buildResources": "build"
+    },
+     "binary": {
+      "module_name": "cueforge_audio",
+      "module_path": "./native/build/Release/",
+      "remote_path": "./",
+      "package_name": "{module_name}-v{version}-{node_abi}-{platform}-{arch}.tar.gz"
     },
     "files": [
       "main.js",
