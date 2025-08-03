@@ -2,7 +2,11 @@
 #include "../include/MatrixMixer.h"
 
 AudioCue::AudioCue(const juce::String& id, MatrixMixer* mixer)
-    : cueId(id), matrixMixer(mixer)
+    : cueId(id)
+    , matrixMixer(mixer)
+    , readerSource(nullptr)
+    , transportSource(nullptr)
+    , resamplingSource(nullptr)
 {
     // Initialize channel routing to default (no routing)
     channelRouting.resize(8, -1); // Support up to 8 channels by default

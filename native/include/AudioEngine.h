@@ -52,7 +52,7 @@ public:
                              int numInputChannels,
                              float* const* outputChannelData,
                              int numOutputChannels,
-                             int numSamples) override;
+                             int numSamples);
 
     void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
     void audioDeviceStopped() override;

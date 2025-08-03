@@ -1,4 +1,6 @@
 #include "../include/MatrixMixer.h"
+#include <juce_data_structures/juce_data_structures.h>
+#include <juce_audio_basics/juce_audio_basics.h>
 
 MatrixMixer::MatrixMixer()
 {
