@@ -1,351 +1,388 @@
 #include "audio_bridge.h"
-#include <JuceHeader.h>
+#include "../include/AudioEngine.h"
+#include "../include/CommandProcessor.h"
 
-// Static member definition
-Napi::FunctionReference AudioEngineWrapper::constructor;
-
-AudioEngineWrapper::AudioEngineWrapper(const Napi::CallbackInfo& info)
-    : Napi::ObjectWrap<AudioEngineWrapper>(info)
+// AudioBridge implementation
+AudioBridge::AudioBridge() 
+    : eventEnv(nullptr), eventCallbackRef(nullptr)
 {
-    Napi::Env env = info.Env();
-    
-    try
-    {
-        // Initialize JUCE
-        juce::initialiseJuce_GUI();
-        
-        // Create audio engine and command processor
-        audioEngine = std::make_unique<CueForge::AudioEngine>();
-        commandProcessor = std::make_unique<CueForge::CommandProcessor>(*audioEngine);
-        
-        // Start event loop for callbacks
-        StartEventLoop();
-        
-        juce::Logger::writeToLog("AudioEngineWrapper: Created successfully");
-    }
-    catch (const std::exception& e)
-    {
-        Napi::TypeError::New(env, "Failed to create AudioEngine: " + std::string(e.what()))
-            .ThrowAsJavaScriptException();
-    }
+    audioEngine = std::make_unique<AudioEngine>();
+    commandProcessor = std::make_unique<CommandProcessor>(audioEngine.get());
 }
 
-AudioEngineWrapper::~AudioEngineWrapper()
+AudioBridge::~AudioBridge()
 {
-    StopEventLoop();
-    
-    if (audioEngine)
-    {
+    shutdown();
+}
+
+bool AudioBridge::initialize()
+{
+    if (audioEngine) {
+        return audioEngine->initialize();
+    }
+    return false;
+}
+
+void AudioBridge::shutdown()
+{
+    if (audioEngine) {
         audioEngine->shutdown();
-        audioEngine.reset();
     }
-    
-    commandProcessor.reset();
-    
-    juce::shutdownJuce_GUI();
-    
-    juce::Logger::writeToLog("AudioEngineWrapper: Destroyed");
 }
 
-Napi::Object AudioEngineWrapper::Init(Napi::Env env, Napi::Object exports)
+bool AudioBridge::isInitialized() const
 {
-    Napi::HandleScope scope(env);
+    return audioEngine && audioEngine->isInitialized();
+}
+
+napi_value AudioBridge::processCommand(napi_env env, const char* jsonCommand)
+{
+    if (!commandProcessor) {
+        napi_throw_error(env, nullptr, "CommandProcessor not initialized");
+        return nullptr;
+    }
     
-    Napi::Function func = DefineClass(env, "AudioEngine", {
-        InstanceMethod("sendCommand", &AudioEngineWrapper::SendCommand),
-        InstanceMethod("initialize", &AudioEngineWrapper::Initialize),
-        InstanceMethod("shutdown", &AudioEngineWrapper::Shutdown),
-        InstanceMethod("getStatus", &AudioEngineWrapper::GetStatus)
+    try {
+        juce::String command(jsonCommand);
+        juce::var result = commandProcessor->processCommand(command);
+        return juceVarToNapi(env, result);
+    }
+    catch (const std::exception& e) {
+        napi_throw_error(env, nullptr, e.what());
+        return nullptr;
+    }
+}
+
+napi_value AudioBridge::processCommandVar(napi_env env, napi_value commandObj)
+{
+    if (!commandProcessor) {
+        napi_throw_error(env, nullptr, "CommandProcessor not initialized");
+        return nullptr;
+    }
+    
+    try {
+        juce::var command = napiToJuceVar(env, commandObj);
+        juce::var result = commandProcessor->processCommand(command);
+        return juceVarToNapi(env, result);
+    }
+    catch (const std::exception& e) {
+        napi_throw_error(env, nullptr, e.what());
+        return nullptr;
+    }
+}
+
+void AudioBridge::setEventCallback(napi_env env, napi_value callback)
+{
+    eventEnv = env;
+    NAPI_CALL_RETURN_VOID(env, napi_create_reference(env, callback, 1, &eventCallbackRef));
+    
+    // Set up the callback with CommandProcessor
+    commandProcessor->setEventCallback([this](const juce::String& eventType, const juce::var& eventData) {
+        this->onAudioEvent(eventType, eventData);
     });
+}
+
+void AudioBridge::onAudioEvent(const juce::String& eventType, const juce::var& eventData)
+{
+    if (eventEnv && eventCallbackRef) {
+        callJavaScriptCallback(eventType, eventData);
+    }
+}
+
+void AudioBridge::callJavaScriptCallback(const juce::String& eventType, const juce::var& eventData)
+{
+    // This would need to be called from the main thread in a real implementation
+    // For now, just a placeholder
+}
+
+// Utility conversion functions
+napi_value AudioBridge::juceVarToNapi(napi_env env, const juce::var& value)
+{
+    napi_value result;
     
-    constructor = Napi::Persistent(func);
-    constructor.SuppressDestruct();
+    if (value.isVoid()) {
+        NAPI_CALL(env, napi_get_undefined(env, &result));
+    }
+    else if (value.isBool()) {
+        NAPI_CALL(env, napi_get_boolean(env, (bool)value, &result));
+    }
+    else if (value.isInt() || value.isInt64()) {
+        NAPI_CALL(env, napi_create_int32(env, (int)value, &result));
+    }
+    else if (value.isDouble()) {
+        NAPI_CALL(env, napi_create_double(env, (double)value, &result));
+    }
+    else if (value.isString()) {
+        juce::String str = value.toString();
+        NAPI_CALL(env, napi_create_string_utf8(env, str.toUTF8(), NAPI_AUTO_LENGTH, &result));
+    }
+    else if (value.isArray()) {
+        juce::Array<juce::var>* array = value.getArray();
+        NAPI_CALL(env, napi_create_array_with_length(env, array->size(), &result));
+        
+        for (int i = 0; i < array->size(); ++i) {
+            napi_value element = juceVarToNapi(env, (*array)[i]);
+            NAPI_CALL(env, napi_set_element(env, result, i, element));
+        }
+    }
+    else if (value.isObject()) {
+        NAPI_CALL(env, napi_create_object(env, &result));
+        
+        if (auto* obj = value.getDynamicObject()) {
+            for (auto& prop : obj->getProperties()) {
+                napi_value key = juceStringToNapi(env, prop.name.toString());
+                napi_value val = juceVarToNapi(env, prop.value);
+                NAPI_CALL(env, napi_set_property(env, result, key, val));
+            }
+        }
+    }
+    else {
+        NAPI_CALL(env, napi_get_null(env, &result));
+    }
     
-    exports.Set("AudioEngine", func);
+    return result;
+}
+
+juce::var AudioBridge::napiToJuceVar(napi_env env, napi_value value)
+{
+    napi_valuetype type;
+    NAPI_CALL(env, napi_typeof(env, value, &type));
+    
+    switch (type) {
+        case napi_undefined:
+        case napi_null:
+            return juce::var::undefined();
+            
+        case napi_boolean: {
+            bool result;
+            NAPI_CALL(env, napi_get_value_bool(env, value, &result));
+            return juce::var(result);
+        }
+        
+        case napi_number: {
+            double result;
+            NAPI_CALL(env, napi_get_value_double(env, value, &result));
+            return juce::var(result);
+        }
+        
+        case napi_string: {
+            size_t length;
+            NAPI_CALL(env, napi_get_value_string_utf8(env, value, nullptr, 0, &length));
+            
+            std::string str(length, '\0');
+            NAPI_CALL(env, napi_get_value_string_utf8(env, value, &str[0], length + 1, &length));
+            
+            return juce::var(juce::String(str));
+        }
+        
+        case napi_object: {
+            bool isArray;
+            NAPI_CALL(env, napi_is_array(env, value, &isArray));
+            
+            if (isArray) {
+                uint32_t length;
+                NAPI_CALL(env, napi_get_array_length(env, value, &length));
+                
+                juce::Array<juce::var> array;
+                for (uint32_t i = 0; i < length; ++i) {
+                    napi_value element;
+                    NAPI_CALL(env, napi_get_element(env, value, i, &element));
+                    array.add(napiToJuceVar(env, element));
+                }
+                return juce::var(array);
+            }
+            else {
+                auto* obj = new juce::DynamicObject();
+                
+                napi_value propertyNames;
+                NAPI_CALL(env, napi_get_property_names(env, value, &propertyNames));
+                
+                uint32_t length;
+                NAPI_CALL(env, napi_get_array_length(env, propertyNames, &length));
+                
+                for (uint32_t i = 0; i < length; ++i) {
+                    napi_value key, val;
+                    NAPI_CALL(env, napi_get_element(env, propertyNames, i, &key));
+                    NAPI_CALL(env, napi_get_property(env, value, key, &val));
+                    
+                    juce::String keyStr = napiStringToJuce(env, key);
+                    juce::var valVar = napiToJuceVar(env, val);
+                    
+                    obj->setProperty(keyStr, valVar);
+                }
+                
+                return juce::var(obj);
+            }
+        }
+        
+        default:
+            return juce::var::undefined();
+    }
+}
+
+juce::String AudioBridge::napiStringToJuce(napi_env env, napi_value value)
+{
+    size_t length;
+    if (napi_get_value_string_utf8(env, value, nullptr, 0, &length) != napi_ok) {
+        return juce::String();
+    }
+    
+    std::string str(length, '\0');
+    if (napi_get_value_string_utf8(env, value, &str[0], length + 1, &length) != napi_ok) {
+        return juce::String();
+    }
+    
+    return juce::String(str);
+}
+
+napi_value AudioBridge::juceStringToNapi(napi_env env, const juce::String& str)
+{
+    napi_value result;
+    if (napi_create_string_utf8(env, str.toUTF8(), NAPI_AUTO_LENGTH, &result) != napi_ok) {
+        napi_get_null(env, &result);
+    }
+    return result;
+}
+
+// Global AudioBridge instance
+static std::unique_ptr<AudioBridge> g_audioBridge;
+
+// C-style API implementations
+extern "C" {
+
+napi_value Init(napi_env env, napi_value exports)
+{
+    // Create the global AudioBridge instance
+    g_audioBridge = std::make_unique<AudioBridge>();
+    
+    // Export constructor
+    napi_value cons;
+    napi_define_class(env, "AudioEngine", NAPI_AUTO_LENGTH, CreateAudioEngine, nullptr, 0, nullptr, &cons);
+    napi_set_named_property(env, exports, "AudioEngine", cons);
+    
+    // Export static methods
+    napi_property_descriptor desc[] = {
+        {"initialize", nullptr, AudioEngine_Initialize, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"shutdown", nullptr, AudioEngine_Shutdown, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"getStatus", nullptr, AudioEngine_GetStatus, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"processCommand", nullptr, AudioEngine_ProcessCommand, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"setEventCallback", nullptr, AudioEngine_SetEventCallback, nullptr, nullptr, nullptr, napi_default, nullptr},
+    };
+    
+    napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
     
     return exports;
 }
 
-Napi::Value AudioEngineWrapper::SendCommand(const Napi::CallbackInfo& info)
+napi_value CreateAudioEngine(napi_env env, napi_callback_info info)
 {
-    Napi::Env env = info.Env();
-    
-    if (info.Length() < 1)
-    {
-        Napi::TypeError::New(env, "Expected at least 1 argument").ThrowAsJavaScriptException();
-        return env.Null();
-    }
-    
-    if (!info[0].IsObject())
-    {
-        Napi::TypeError::New(env, "Expected command to be an object").ThrowAsJavaScriptException();
-        return env.Null();
-    }
-    
-    try
-    {
-        // Convert Napi object to JUCE var
-        juce::var command = NapiToJuceVar(info[0]);
-        
-        // Process command
-        juce::var result = commandProcessor->processCommand(command);
-        
-        // Convert result back to Napi
-        return JuceVarToNapi(env, result);
-    }
-    catch (const std::exception& e)
-    {
-        Napi::Error::New(env, "Command processing failed: " + std::string(e.what()))
-            .ThrowAsJavaScriptException();
-        return env.Null();
-    }
+    napi_value jsthis;
+    NAPI_CALL(env, napi_get_cb_info(env, info, nullptr, nullptr, &jsthis, nullptr));
+    return jsthis;
 }
 
-Napi::Value AudioEngineWrapper::Initialize(const Napi::CallbackInfo& info)
+napi_value AudioEngine_Initialize(napi_env env, napi_callback_info info)
 {
-    Napi::Env env = info.Env();
-    
-    int sampleRate = 44100;
-    int bufferSize = 512;
-    
-    if (info.Length() >= 1 && info[0].IsNumber())
-    {
-        sampleRate = info[0].As<Napi::Number>().Int32Value();
+    bool result = false;
+    if (g_audioBridge) {
+        result = g_audioBridge->initialize();
     }
     
-    if (info.Length() >= 2 && info[1].IsNumber())
-    {
-        bufferSize = info[1].As<Napi::Number>().Int32Value();
-    }
-    
-    bool success = audioEngine->initialize(sampleRate, bufferSize);
-    
-    return Napi::Boolean::New(env, success);
+    napi_value jsResult;
+    napi_get_boolean(env, result, &jsResult);
+    return jsResult;
 }
 
-Napi::Value AudioEngineWrapper::Shutdown(const Napi::CallbackInfo& info)
+napi_value AudioEngine_Shutdown(napi_env env, napi_callback_info info)
 {
-    Napi::Env env = info.Env();
-    
-    if (audioEngine)
-    {
-        audioEngine->shutdown();
+    if (g_audioBridge) {
+        g_audioBridge->shutdown();
     }
     
-    return env.Undefined();
+    napi_value undefined;
+    napi_get_undefined(env, &undefined);
+    return undefined;
 }
 
-Napi::Value AudioEngineWrapper::GetStatus(const Napi::CallbackInfo& info)
+napi_value AudioEngine_GetStatus(napi_env env, napi_callback_info info)
 {
-    Napi::Env env = info.Env();
-    
-    if (!audioEngine)
-    {
-        return env.Null();
+    if (!g_audioBridge) {
+        napi_throw_error(env, nullptr, "AudioEngine not initialized");
+        return nullptr;
     }
     
-    try
-    {
-        juce::var status = audioEngine->getSystemStatus();
-        return JuceVarToNapi(env, status);
-    }
-    catch (const std::exception& e)
-    {
-        Napi::Error::New(env, "Failed to get status: " + std::string(e.what()))
-            .ThrowAsJavaScriptException();
-        return env.Null();
-    }
+    // Create a simple status object for now
+    napi_value status;
+    napi_create_object(env, &status);
+    
+    napi_value isInitialized;
+    napi_get_boolean(env, g_audioBridge->isInitialized(), &isInitialized);
+    napi_set_named_property(env, status, "isInitialized", isInitialized);
+    
+    return status;
 }
 
-void AudioEngineWrapper::StartEventLoop()
+napi_value AudioEngine_ProcessCommand(napi_env env, napi_callback_info info)
 {
-    if (shouldRun.load())
-        return; // Already running
+    size_t argc = 1;
+    napi_value args[1];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     
-    shouldRun.store(true);
-    
-    eventThread = std::make_unique<std::thread>([this]()
-    {
-        juce::Logger::writeToLog("AudioEngineWrapper: Event loop started");
-        
-        while (shouldRun.load())
-        {
-            // Send periodic performance updates
-            if (audioEngine)
-            {
-                try
-                {
-                    juce::var perfEvent = commandProcessor->createPerformanceEvent(
-                        audioEngine->getCpuUsage(),
-                        audioEngine->getDropoutCount(),
-                        0.0f // Memory usage placeholder
-                    );
-                    
-                    EmitEvent("performanceStats", perfEvent);
-                }
-                catch (const std::exception& e)
-                {
-                    juce::Logger::writeToLog("Event loop error: " + juce::String(e.what()));
-                }
-            }
-            
-            // Sleep for 1 second between updates
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-        }
-        
-        juce::Logger::writeToLog("AudioEngineWrapper: Event loop stopped");
-    });
-}
-
-void AudioEngineWrapper::StopEventLoop()
-{
-    shouldRun.store(false);
-    
-    if (eventThread && eventThread->joinable())
-    {
-        eventThread->join();
-        eventThread.reset();
-    }
-}
-
-void AudioEngineWrapper::EmitEvent(const std::string& eventType, const juce::var& data)
-{
-    // In a full implementation, you would emit events back to JavaScript
-    // For now, just log them
-    juce::Logger::writeToLog("Event: " + eventType + " - " + juce::JSON::toString(data));
-}
-
-juce::var AudioEngineWrapper::NapiToJuceVar(const Napi::Value& value)
-{
-    if (value.IsNull() || value.IsUndefined())
-    {
-        return juce::var();
-    }
-    else if (value.IsBoolean())
-    {
-        return juce::var(value.As<Napi::Boolean>().Value());
-    }
-    else if (value.IsNumber())
-    {
-        // Check if it's an integer or float
-        double numValue = value.As<Napi::Number>().DoubleValue();
-        if (numValue == std::floor(numValue))
-        {
-            return juce::var(static_cast<int>(numValue));
-        }
-        else
-        {
-            return juce::var(numValue);
-        }
-    }
-    else if (value.IsString())
-    {
-        return juce::var(value.As<Napi::String>().Utf8Value());
-    }
-    else if (value.IsArray())
-    {
-        Napi::Array arr = value.As<Napi::Array>();
-        juce::Array<juce::var> juceArray;
-        
-        for (uint32_t i = 0; i < arr.Length(); ++i)
-        {
-            juceArray.add(NapiToJuceVar(arr[i]));
-        }
-        
-        return juce::var(juceArray);
-    }
-    else if (value.IsObject())
-    {
-        Napi::Object obj = value.As<Napi::Object>();
-        Napi::Array propNames = obj.GetPropertyNames();
-        
-        juce::DynamicObject::Ptr dynamicObj = new juce::DynamicObject();
-        
-        for (uint32_t i = 0; i < propNames.Length(); ++i)
-        {
-            Napi::Value key = propNames[i];
-            juce::String propName = key.As<Napi::String>().Utf8Value();
-            juce::var propValue = NapiToJuceVar(obj.Get(key));
-            
-            dynamicObj->setProperty(propName, propValue);
-        }
-        
-        return juce::var(dynamicObj.get());
+    if (argc < 1) {
+        napi_throw_error(env, nullptr, "Expected 1 argument");
+        return nullptr;
     }
     
-    return juce::var();
-}
-
-Napi::Value AudioEngineWrapper::JuceVarToNapi(Napi::Env env, const juce::var& value)
-{
-    if (value.isVoid())
-    {
-        return env.Null();
-    }
-    else if (value.isBool())
-    {
-        return Napi::Boolean::New(env, static_cast<bool>(value));
-    }
-    else if (value.isInt())
-    {
-        return Napi::Number::New(env, static_cast<int>(value));
-    }
-    else if (value.isInt64())
-    {
-        return Napi::Number::New(env, static_cast<int64_t>(value));
-    }
-    else if (value.isDouble())
-    {
-        return Napi::Number::New(env, static_cast<double>(value));
-    }
-    else if (value.isString())
-    {
-        return Napi::String::New(env, value.toString().toStdString());
-    }
-    else if (value.isArray())
-    {
-        juce::Array<juce::var>* arr = value.getArray();
-        Napi::Array napiArray = Napi::Array::New(env, arr->size());
-        
-        for (int i = 0; i < arr->size(); ++i)
-        {
-            napiArray[i] = JuceVarToNapi(env, (*arr)[i]);
-        }
-        
-        return napiArray;
-    }
-    else if (value.isObject())
-    {
-        juce::DynamicObject* obj = value.getDynamicObject();
-        Napi::Object napiObj = Napi::Object::New(env);
-        
-        if (obj)
-        {
-            auto& properties = obj->getProperties();
-            
-            for (auto it = properties.begin(); it != properties.end(); ++it)
-            {
-                juce::String propName = it.getName().toString();
-                juce::var propValue = it.getValue();
-                
-                napiObj.Set(propName.toStdString(), JuceVarToNapi(env, propValue));
-            }
-        }
-        
-        return napiObj;
+    if (!g_audioBridge) {
+        napi_throw_error(env, nullptr, "AudioEngine not initialized");
+        return nullptr;
     }
     
-    return env.Null();
+    return g_audioBridge->processCommandVar(env, args[0]);
 }
 
-// Module initialization function
-Napi::Object InitModule(Napi::Env env, Napi::Object exports)
+napi_value AudioEngine_SetEventCallback(napi_env env, napi_callback_info info)
 {
-    // Set up JUCE message manager for this thread
-    juce::MessageManager::getInstance();
+    size_t argc = 1;
+    napi_value args[1];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     
-    return AudioEngineWrapper::Init(env, exports);
+    if (argc < 1) {
+        napi_throw_error(env, nullptr, "Expected 1 argument");
+        return nullptr;
+    }
+    
+    if (!g_audioBridge) {
+        napi_throw_error(env, nullptr, "AudioEngine not initialized");
+        return nullptr;
+    }
+    
+    g_audioBridge->setEventCallback(env, args[0]);
+    
+    napi_value undefined;
+    napi_get_undefined(env, &undefined);
+    return undefined;
 }
 
-// Register the module
-NODE_API_MODULE(cueforge_audio, InitModule)
+// Placeholder implementations for other functions
+napi_value AudioEngine_SetAudioDevice(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_GetAvailableDevices(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_CreateAudioCue(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_LoadAudioFile(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_PlayCue(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_StopCue(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_PauseCue(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_ResumeCue(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_StopAllCues(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_SetCrosspoint(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_GetCrosspoint(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_SetInputLevel(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_SetOutputLevel(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_MuteOutput(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_SoloOutput(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_SetPatchRouting(napi_env env, napi_callback_info info) { return nullptr; }
+napi_value AudioEngine_GetPatchRouting(napi_env env, napi_callback_info info) { return nullptr; }
+
+NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)
+
+} // extern "C"

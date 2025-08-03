@@ -1,496 +1,344 @@
 #include "../include/AudioEngine.h"
-#include <JuceHeader.h>
-#include <algorithm>
+#include "../include/MatrixMixer.h"
+#include "../include/OutputPatch.h"
+#include "../include/AudioCue.h"
 
-namespace CueForge {
-
+// AudioEngine implementation
 AudioEngine::AudioEngine()
-    : deviceManager(std::make_unique<juce::AudioDeviceManager>()),
-      formatManager(std::make_unique<juce::AudioFormatManager>())
+    : formatManager(std::make_unique<juce::AudioFormatManager>())
+    , deviceManager(std::make_unique<juce::AudioDeviceManager>())
+    , mixer(std::make_unique<MatrixMixer>())
+    , outputPatch(std::make_unique<OutputPatch>())
 {
-    formatManager->registerBasicFormats();
-    deviceManager->addChangeListener(this);
-    
-    juce::Logger::writeToLog("AudioEngine: Created");
+    initializeAudioFormats();
 }
 
 AudioEngine::~AudioEngine()
 {
     shutdown();
-    juce::Logger::writeToLog("AudioEngine: Destroyed");
 }
 
-bool AudioEngine::initialize(int sampleRate, int bufferSize)
+bool AudioEngine::initialize()
 {
-    juce::Logger::writeToLog("AudioEngine: Initializing (SR: " + 
-                            juce::String(sampleRate) + ", Buffer: " + 
-                            juce::String(bufferSize) + ")");
+    if (initialized.load()) {
+        return true;
+    }
     
-    juce::AudioDeviceManager::AudioDeviceSetup setup;
-    setup.outputDeviceName = "";
-    setup.inputDeviceName = "";
-    setup.sampleRate = sampleRate;
-    setup.bufferSize = bufferSize;
-    setup.useDefaultInputChannels = true;
-    setup.useDefaultOutputChannels = true;
-    
-    juce::String error = deviceManager->initialise(2, 2, nullptr, true, "", &setup);
-    
-    if (error.isNotEmpty())
-    {
-        juce::Logger::writeToLog("AudioEngine: Failed to initialize audio device: " + error);
+    // Initialize audio device manager
+    juce::String error = deviceManager->initialise(0, 2, nullptr, true);
+    if (error.isNotEmpty()) {
         return false;
     }
     
+    // Set up audio callback
     deviceManager->addAudioCallback(this);
-    createOutputPatch("main", "Main Output", 64, 2);
-    defaultPatchId = "main";
     
-    juce::Logger::writeToLog("AudioEngine: Initialized successfully");
-    return true;
-}
-
-bool AudioEngine::setAudioDevice(const juce::String& deviceId)
-{
-    juce::Logger::writeToLog("AudioEngine: Setting audio device: " + deviceId);
-    
-    auto* currentSetup = &deviceManager->getAudioDeviceSetup();
-    juce::AudioDeviceManager::AudioDeviceSetup newSetup = *currentSetup;
-    
-    if (deviceId.contains("ASIO"))
-    {
-        juce::OwnedArray<juce::AudioIODeviceType> deviceTypes;
-        deviceManager->createAudioDeviceTypes(deviceTypes);
-        
-        for (auto* deviceType : deviceTypes)
-        {
-            if (deviceType->getTypeName().contains("ASIO"))
-            {
-                deviceType->scanForDevices();
-                juce::StringArray deviceNames = deviceType->getDeviceNames();
-                
-                for (const auto& name : deviceNames)
-                {
-                    if (deviceId.contains(name) || name.contains(deviceId.substring(6)))
-                    {
-                        newSetup.outputDeviceName = name;
-                        newSetup.inputDeviceName = name;
-                        break;
-                    }
-                }
-                break;
-            }
-        }
-    }
-    else
-    {
-        newSetup.outputDeviceName = "";
-        newSetup.inputDeviceName = "";
-    }
-    
-    juce::String error = deviceManager->setAudioDeviceSetup(newSetup, true);
-    
-    if (error.isNotEmpty())
-    {
-        juce::Logger::writeToLog("AudioEngine: Failed to set audio device: " + error);
-        return false;
-    }
-    
-    juce::Logger::writeToLog("AudioEngine: Audio device set successfully");
+    initialized.store(true);
     return true;
 }
 
 void AudioEngine::shutdown()
 {
-    juce::Logger::writeToLog("AudioEngine: Shutting down");
-    
-    {
-        juce::ScopedLock lock(cuesLock);
-        for (auto& [id, cue] : cues)
-        {
-            cue->stop(0.0f);
-        }
-        cues.clear();
+    if (!initialized.load()) {
+        return;
     }
     
-    patches.clear();
+    // Stop all cues
+    stopAllCues();
     
-    if (deviceManager)
-    {
-        deviceManager->removeAudioCallback(this);
-        deviceManager->removeChangeListener(this);
-        deviceManager->closeAudioDevice();
-    }
+    // Remove audio callback
+    deviceManager->removeAudioCallback(this);
     
-    juce::Logger::writeToLog("AudioEngine: Shutdown complete");
+    // Clean up device manager
+    deviceManager->closeAudioDevice();
+    
+    initialized.store(false);
 }
 
-void AudioEngine::audioDeviceIOCallback(const float** inputChannelData,
+bool AudioEngine::setAudioDevice(const juce::String& deviceName)
+{
+    // Implementation placeholder
+    return false;
+}
+
+juce::StringArray AudioEngine::getAvailableDevices() const
+{
+    return juce::StringArray();
+}
+
+juce::String AudioEngine::getCurrentDevice() const
+{
+    if (auto* device = deviceManager->getCurrentAudioDevice()) {
+        return device->getName();
+    }
+    return juce::String();
+}
+
+AudioEngine::Status AudioEngine::getStatus() const
+{
+    Status status;
+    status.isRunning = initialized.load();
+    status.sampleRate = currentSampleRate.load();
+    status.bufferSize = currentBufferSize.load();
+    status.cpuUsage = cpuUsage.load();
+    status.dropoutCount = dropoutCount.load();
+    status.currentDevice = getCurrentDevice();
+    return status;
+}
+
+void AudioEngine::audioDeviceIOCallback(const float* const* inputChannelData,
                                        int numInputChannels,
-                                       float** outputChannelData,
+                                       float* const* outputChannelData,
                                        int numOutputChannels,
                                        int numSamples)
 {
-    updatePerformanceStats();
-    
-    for (int ch = 0; ch < numOutputChannels; ++ch)
-    {
-        juce::FloatVectorOperations::clear(outputChannelData[ch], numSamples);
+    // Clear output buffers
+    for (int i = 0; i < numOutputChannels; ++i) {
+        juce::FloatVectorOperations::clear(outputChannelData[i], numSamples);
     }
     
-    {
-        juce::ScopedLock lock(cuesLock);
-        
-        for (auto& [cueId, cue] : cues)
-        {
-            if (cue->isPlaying())
-            {
-                juce::AudioBuffer<float> cueBuffer(64, numSamples);
-                cueBuffer.clear();
-                
-                cue->processAudio(cueBuffer, 0, numSamples);
-                
-                auto* defaultPatch = findPatch(defaultPatchId);
-                if (defaultPatch)
-                {
-                    for (int cueOut = 0; cueOut < cueBuffer.getNumChannels(); ++cueOut)
-                    {
-                        const float* cueData = cueBuffer.getReadPointer(cueOut);
-                        
-                        for (int deviceOut = 0; deviceOut < numOutputChannels; ++deviceOut)
-                        {
-                            float gain = (cueOut == deviceOut) ? 1.0f : 0.0f;
-                            
-                            if (gain > 0.0f)
-                            {
-                                juce::FloatVectorOperations::addWithMultiply(
-                                    outputChannelData[deviceOut], cueData, gain, numSamples);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // Process audio through mixer and output patch
+    if (mixer && outputPatch) {
+        processAudioBlock(outputChannelData, numOutputChannels, numSamples);
     }
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
 {
-    juce::Logger::writeToLog("AudioEngine: Audio device about to start - " + 
-                            device->getName() + 
-                            " (SR: " + juce::String(device->getCurrentSampleRate()) + 
-                            ", Buffer: " + juce::String(device->getCurrentBufferSizeSamples()) + ")");
+    currentSampleRate.store(device->getCurrentSampleRate());
+    currentBufferSize.store(device->getCurrentBufferSizeSamples());
     
-    audioBuffer.setSize(2, device->getCurrentBufferSizeSamples());
-    audioBuffer.clear();
-    
-    dropoutCount = 0;
-    cpuUsage = 0.0f;
-    lastCallbackTime = juce::Time::getCurrentTime();
+    // Prepare buffers
+    mixBuffer.setSize(64, device->getCurrentBufferSizeSamples());
+    tempBuffer.setSize(64, device->getCurrentBufferSizeSamples());
 }
 
 void AudioEngine::audioDeviceStopped()
 {
-    juce::Logger::writeToLog("AudioEngine: Audio device stopped");
+    // Clean up when audio device stops
 }
 
-void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source)
+bool AudioEngine::createAudioCue(const juce::String& cueId, const juce::String& filePath)
 {
-    if (source == deviceManager.get())
-    {
-        juce::Logger::writeToLog("AudioEngine: Audio device configuration changed");
-    }
-}
-
-std::string AudioEngine::createAudioCue(const std::string& cueId, const std::string& filePath)
-{
-    juce::Logger::writeToLog("AudioEngine: Creating audio cue " + juce::String(cueId) + 
-                            " with file " + juce::String(filePath));
+    juce::ScopedLock lock(cueMapLock);
     
-    try
-    {
-        auto cue = std::make_unique<AudioCue>(cueId, filePath);
-        
-        if (!cue->isLoaded())
-        {
-            return "Failed to load audio file: " + filePath;
-        }
-        
-        {
-            juce::ScopedLock lock(cuesLock);
-            cues[cueId] = std::move(cue);
-        }
-        
-        juce::Logger::writeToLog("AudioEngine: Successfully created cue " + juce::String(cueId));
-        return "";
+    if (audioCues.find(cueId) != audioCues.end()) {
+        return false; // Cue already exists
     }
-    catch (const std::exception& e)
-    {
-        juce::String error = "Exception creating cue: " + juce::String(e.what());
-        juce::Logger::writeToLog("AudioEngine: " + error);
-        return error.toStdString();
-    }
-}
-
-bool AudioEngine::playCue(const std::string& cueId, float startTime, float volume)
-{
-    juce::Logger::writeToLog("AudioEngine: Playing cue " + juce::String(cueId));
     
-    AudioCue* cue = findCue(cueId);
-    if (!cue)
-    {
-        juce::Logger::writeToLog("AudioEngine: Cue not found: " + juce::String(cueId));
+    auto cue = std::make_unique<AudioCue>(cueId, mixer.get());
+    if (!cue->loadFile(filePath)) {
         return false;
     }
     
-    return cue->play(startTime, volume);
+    audioCues[cueId] = std::move(cue);
+    return true;
 }
 
-bool AudioEngine::stopCue(const std::string& cueId, float fadeTime)
+bool AudioEngine::loadAudioFile(const juce::String& cueId, const juce::String& filePath)
 {
-    juce::Logger::writeToLog("AudioEngine: Stopping cue " + juce::String(cueId));
+    juce::ScopedLock lock(cueMapLock);
     
-    AudioCue* cue = findCue(cueId);
-    if (!cue)
-    {
-        juce::Logger::writeToLog("AudioEngine: Cue not found: " + juce::String(cueId));
+    auto it = audioCues.find(cueId);
+    if (it == audioCues.end()) {
         return false;
     }
     
-    return cue->stop(fadeTime);
+    return it->second->loadFile(filePath);
 }
 
-bool AudioEngine::pauseCue(const std::string& cueId)
+bool AudioEngine::playCue(const juce::String& cueId, double startTime, double fadeInTime)
 {
-    juce::Logger::writeToLog("AudioEngine: Pausing cue " + juce::String(cueId));
+    juce::ScopedLock lock(cueMapLock);
     
-    AudioCue* cue = findCue(cueId);
-    if (!cue) return false;
+    auto it = audioCues.find(cueId);
+    if (it == audioCues.end()) {
+        return false;
+    }
     
-    return cue->pause();
+    return it->second->play(startTime, fadeInTime);
 }
 
-bool AudioEngine::resumeCue(const std::string& cueId)
+bool AudioEngine::stopCue(const juce::String& cueId, double fadeOutTime)
 {
-    juce::Logger::writeToLog("AudioEngine: Resuming cue " + juce::String(cueId));
+    juce::ScopedLock lock(cueMapLock);
     
-    AudioCue* cue = findCue(cueId);
-    if (!cue) return false;
+    auto it = audioCues.find(cueId);
+    if (it == audioCues.end()) {
+        return false;
+    }
     
-    return cue->resume();
+    return it->second->stop(fadeOutTime);
 }
 
-bool AudioEngine::setCueMatrixRouting(const std::string& cueId, const juce::var& matrixData)
+bool AudioEngine::pauseCue(const juce::String& cueId)
 {
-    AudioCue* cue = findCue(cueId);
-    if (!cue) return false;
+    juce::ScopedLock lock(cueMapLock);
     
-    if (matrixData.hasProperty("routing"))
+    auto it = audioCues.find(cueId);
+    if (it == audioCues.end()) {
+        return false;
+    }
+    
+    return it->second->pause();
+}
+
+bool AudioEngine::resumeCue(const juce::String& cueId)
+{
+    juce::ScopedLock lock(cueMapLock);
+    
+    auto it = audioCues.find(cueId);
+    if (it == audioCues.end()) {
+        return false;
+    }
+    
+    return it->second->resume();
+}
+
+void AudioEngine::stopAllCues()
+{
+    juce::ScopedLock lock(cueMapLock);
+    
+    for (auto& pair : audioCues) {
+        pair.second->stop(0.0);
+    }
+}
+
+bool AudioEngine::setCrosspoint(const juce::String& cueId, int input, int output, float level)
+{
+    if (!mixer) {
+        return false;
+    }
+    
+    mixer->setCrosspoint(input, output, level);
+    return true;
+}
+
+float AudioEngine::getCrosspoint(const juce::String& cueId, int input, int output) const
+{
+    if (!mixer) {
+        return 0.0f;
+    }
+    
+    return mixer->getCrosspoint(input, output);
+}
+
+bool AudioEngine::setInputLevel(const juce::String& cueId, int input, float level)
+{
+    if (!mixer) {
+        return false;
+    }
+    
+    mixer->setInputLevel(input, level);
+    return true;
+}
+
+bool AudioEngine::setOutputLevel(int output, float level)
+{
+    if (!mixer) {
+        return false;
+    }
+    
+    mixer->setOutputLevel(output, level);
+    return true;
+}
+
+bool AudioEngine::muteOutput(int output, bool mute)
+{
+    if (!mixer) {
+        return false;
+    }
+    
+    mixer->muteOutput(output, mute);
+    return true;
+}
+
+bool AudioEngine::soloOutput(int output, bool solo)
+{
+    if (!mixer) {
+        return false;
+    }
+    
+    mixer->soloOutput(output, solo);
+    return true;
+}
+
+bool AudioEngine::setPatchRouting(int cueOutput, int deviceOutput, float level)
+{
+    if (!outputPatch) {
+        return false;
+    }
+    
+    outputPatch->setPatchRouting(cueOutput, deviceOutput, level);
+    return true;
+}
+
+float AudioEngine::getPatchRouting(int cueOutput, int deviceOutput) const
+{
+    if (!outputPatch) {
+        return 0.0f;
+    }
+    
+    return outputPatch->getPatchRouting(cueOutput, deviceOutput);
+}
+
+void AudioEngine::initializeAudioFormats()
+{
+    if (!formatManager) {
+        return;
+    }
+    
+    // Register basic audio formats
+    formatManager->registerBasicFormats();
+}
+
+void AudioEngine::setupAudioDevice()
+{
+    // Implementation placeholder for device setup
+}
+
+void AudioEngine::processAudioBlock(float* const* outputChannelData, int numOutputChannels, int numSamples)
+{
+    // Ensure buffers are the right size
+    mixBuffer.setSize(64, numSamples, false, false, true);
+    tempBuffer.setSize(64, numSamples, false, false, true);
+    
+    // Clear mix buffer
+    mixBuffer.clear();
+    
+    // Process all active cues
     {
-        juce::var routingArray = matrixData["routing"];
-        
-        if (routingArray.isArray())
-        {
-            for (int i = 0; i < routingArray.size(); ++i)
-            {
-                juce::var route = routingArray[i];
+        juce::ScopedLock lock(cueMapLock);
+        for (auto& pair : audioCues) {
+            if (pair.second->isPlaying()) {
+                pair.second->processAudioBlock(tempBuffer, numSamples);
                 
-                if (route.hasProperty("input") && route.hasProperty("output") && route.hasProperty("level"))
-                {
-                    int input = route["input"];
-                    int output = route["output"];
-                    float level = route["level"];
-                    
-                    cue->setCrosspoint(input, output, level);
+                // Add to mix buffer
+                for (int ch = 0; ch < juce::jmin(tempBuffer.getNumChannels(), mixBuffer.getNumChannels()); ++ch) {
+                    mixBuffer.addFrom(ch, 0, tempBuffer, ch, 0, numSamples);
                 }
             }
         }
     }
     
-    return true;
+    // Process through matrix mixer
+    const float* const* mixInputs = mixBuffer.getArrayOfReadPointers();
+    float* const* mixOutputs = tempBuffer.getArrayOfWritePointers();
+    
+    mixer->processAudioBlock(mixInputs, mixOutputs, 
+                           mixBuffer.getNumChannels(), 
+                           tempBuffer.getNumChannels(), 
+                           numSamples);
+    
+    // Process through output patch
+    outputPatch->processAudioBlock(tempBuffer.getArrayOfReadPointers(),
+                                 outputChannelData,
+                                 tempBuffer.getNumChannels(),
+                                 numOutputChannels,
+                                 numSamples);
 }
 
-bool AudioEngine::setCrosspoint(const std::string& cueId, int input, int output, float levelDb)
+void AudioEngine::updatePerformanceMetrics()
 {
-    AudioCue* cue = findCue(cueId);
-    if (!cue) return false;
-    
-    return cue->setCrosspoint(input, output, levelDb);
+    // Implementation placeholder for performance monitoring
 }
-
-bool AudioEngine::setCueInputLevel(const std::string& cueId, int input, float levelDb)
-{
-    AudioCue* cue = findCue(cueId);
-    if (!cue) return false;
-    
-    return cue->setInputLevel(input, levelDb);
-}
-
-bool AudioEngine::setCueOutputLevel(const std::string& cueId, int output, float levelDb)
-{
-    AudioCue* cue = findCue(cueId);
-    if (!cue) return false;
-    
-    return cue->setOutputLevel(output, levelDb);
-}
-
-bool AudioEngine::createOutputPatch(const std::string& patchId, const std::string& name, 
-                                   int cueOutputs, int deviceOutputs)
-{
-    juce::Logger::writeToLog("AudioEngine: Creating output patch " + juce::String(patchId));
-    
-    patches[patchId] = nullptr; // Placeholder
-    
-    if (defaultPatchId.empty())
-        defaultPatchId = patchId;
-    
-    return true;
-}
-
-bool AudioEngine::setPatchMatrixRouting(const std::string& patchId, const juce::var& matrixData)
-{
-    return true; // Placeholder
-}
-
-// PROPER JUCE VAR CONSTRUCTION - This is the key fix
-juce::var AudioEngine::getAudioDevices() const
-{
-    juce::Array<juce::var> deviceArray; // Start with Array, not var
-    
-    juce::OwnedArray<juce::AudioIODeviceType> deviceTypes;
-    deviceManager->createAudioDeviceTypes(deviceTypes);
-    
-    for (auto* deviceType : deviceTypes)
-    {
-        deviceType->scanForDevices();
-        juce::StringArray deviceNames = deviceType->getDeviceNames();
-        
-        for (const auto& deviceName : deviceNames)
-        {
-            // CORRECT: Create DynamicObject properly
-            auto* deviceObj = new juce::DynamicObject();
-            
-            juce::String deviceId = deviceType->getTypeName() + "::" + deviceName;
-            
-            deviceObj->setProperty("id", deviceId);
-            deviceObj->setProperty("name", deviceName);
-            deviceObj->setProperty("type", deviceType->getTypeName());
-            
-            auto* testDevice = deviceType->createDevice("", deviceName);
-            if (testDevice)
-            {
-                deviceObj->setProperty("inputChannels", testDevice->getInputChannelNames().size());
-                deviceObj->setProperty("outputChannels", testDevice->getOutputChannelNames().size());
-                
-                juce::Array<juce::var> sampleRates;
-                for (double rate : testDevice->getAvailableSampleRates())
-                    sampleRates.add(rate);
-                deviceObj->setProperty("supportedSampleRates", juce::var(sampleRates));
-                
-                juce::Array<juce::var> bufferSizes;
-                for (int size : testDevice->getAvailableBufferSizes())
-                    bufferSizes.add(size);
-                deviceObj->setProperty("supportedBufferSizes", juce::var(bufferSizes));
-                
-                delete testDevice;
-            }
-            else
-            {
-                deviceObj->setProperty("inputChannels", 2);
-                deviceObj->setProperty("outputChannels", 2);
-                
-                juce::Array<juce::var> defaultRates;
-                defaultRates.add(44100);
-                defaultRates.add(48000);
-                deviceObj->setProperty("supportedSampleRates", juce::var(defaultRates));
-                
-                juce::Array<juce::var> defaultSizes;
-                defaultSizes.add(512);
-                defaultSizes.add(1024);
-                deviceObj->setProperty("supportedBufferSizes", juce::var(defaultSizes));
-            }
-            
-            // CORRECT: Pass DynamicObject* to var constructor
-            deviceArray.add(juce::var(deviceObj));
-        }
-    }
-    
-    // Return the Array wrapped in var
-    return juce::var(deviceArray);
-}
-
-juce::var AudioEngine::getSystemStatus() const
-{
-    // CORRECT: Create DynamicObject properly  
-    auto* statusObj = new juce::DynamicObject();
-    
-    statusObj->setProperty("status", "ready");
-    
-    if (auto* currentDevice = deviceManager->getCurrentAudioDevice())
-    {
-        statusObj->setProperty("currentDevice", currentDevice->getName());
-        statusObj->setProperty("sampleRate", currentDevice->getCurrentSampleRate());
-        statusObj->setProperty("bufferSize", currentDevice->getCurrentBufferSizeSamples());
-    }
-    else
-    {
-        statusObj->setProperty("currentDevice", "No device");
-        statusObj->setProperty("sampleRate", 0);
-        statusObj->setProperty("bufferSize", 0);
-    }
-    
-    statusObj->setProperty("cpuUsage", cpuUsage);
-    statusObj->setProperty("dropouts", dropoutCount);
-    
-    juce::Array<juce::var> activeCueIds;
-    {
-        juce::ScopedLock lock(const_cast<juce::CriticalSection&>(cuesLock));
-        for (const auto& [cueId, cue] : cues)
-        {
-            if (cue->isPlaying())
-                activeCueIds.add(juce::var(juce::String(cueId)));
-        }
-    }
-    statusObj->setProperty("activeCues", juce::var(activeCueIds));
-    
-    return juce::var(statusObj);
-}
-
-void AudioEngine::updatePerformanceStats()
-{
-    auto currentTime = juce::Time::getCurrentTime();
-    auto timeSinceLastCallback = currentTime - lastCallbackTime;
-    lastCallbackTime = currentTime;
-    
-    auto* device = deviceManager->getCurrentAudioDevice();
-    if (device)
-    {
-        double expectedInterval = device->getCurrentBufferSizeSamples() / device->getCurrentSampleRate() * 1000.0;
-        double actualInterval = timeSinceLastCallback.inMilliseconds();
-        
-        if (actualInterval > expectedInterval * 1.1)
-        {
-            dropoutCount++;
-            cpuUsage = std::min(100.0f, cpuUsage + 5.0f);
-        }
-        else
-        {
-            cpuUsage = std::max(0.0f, cpuUsage - 0.1f);
-        }
-    }
-}
-
-AudioCue* AudioEngine::findCue(const std::string& cueId)
-{
-    juce::ScopedLock lock(cuesLock);
-    auto it = cues.find(cueId);
-    return (it != cues.end()) ? it->second.get() : nullptr;
-}
-
-OutputPatch* AudioEngine::findPatch(const std::string& patchId)
-{
-    auto it = patches.find(patchId);
-    return (it != patches.end()) ? it->second.get() : nullptr;
-}
-
-} // namespace CueForge

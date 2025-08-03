@@ -1,426 +1,452 @@
 #include "../include/CommandProcessor.h"
-#include <JuceHeader.h>
+#include "../include/AudioEngine.h"
 
-namespace CueForge {
-
-CommandProcessor::CommandProcessor(AudioEngine& engine)
+CommandProcessor::CommandProcessor(AudioEngine* engine)
     : audioEngine(engine)
 {
-    juce::Logger::writeToLog("CommandProcessor: Created");
+    registerBuiltInCommands();
+}
+
+CommandProcessor::~CommandProcessor()
+{
+}
+
+juce::var CommandProcessor::processCommand(const juce::String& jsonCommand)
+{
+    try {
+        juce::var command = juce::JSON::parse(jsonCommand);
+        return processCommand(command);
+    }
+    catch (const std::exception& e) {
+        return createErrorResponse(juce::String("JSON parse error: ") + e.what());
+    }
 }
 
 juce::var CommandProcessor::processCommand(const juce::var& command)
 {
-    if (!command.hasProperty("command"))
-    {
-        return createErrorResponse("INVALID_COMMAND", "Missing command field");
+    if (!command.isObject()) {
+        return createErrorResponse("Command must be an object");
     }
     
-    juce::String commandType = command["command"].toString();
-    juce::var params = command.getProperty("params", juce::var());
-    
-    juce::Logger::writeToLog("CommandProcessor: Processing command: " + commandType);
-    
-    try
-    {
-        // Route to appropriate handler
-        if (commandType.startsWith("initialize") || commandType.startsWith("setAudio") || 
-            commandType.startsWith("getSystem") || commandType.startsWith("getAudio"))
-        {
-            return handleSystemCommand(params, commandType);
-        }
-        else if (commandType.startsWith("create") && commandType.contains("Cue") ||
-                 commandType.startsWith("play") || commandType.startsWith("stop") ||
-                 commandType.startsWith("pause") || commandType.startsWith("resume") ||
-                 commandType.startsWith("setCue"))
-        {
-            return handleCueCommand(params, commandType);
-        }
-        else if (commandType.startsWith("setCue") && commandType.contains("Matrix") ||
-                 commandType.startsWith("setCrosspoint") || commandType.startsWith("setCueInput") ||
-                 commandType.startsWith("setCueOutput") || commandType.startsWith("setCueGang"))
-        {
-            return handleMatrixCommand(params, commandType);
-        }
-        else if (commandType.startsWith("create") && commandType.contains("Patch") ||
-                 commandType.startsWith("setPatch") || commandType.startsWith("loadPatch"))
-        {
-            return handlePatchCommand(params, commandType);
-        }
-        else if (commandType.startsWith("setDevice") || commandType.startsWith("getAudio"))
-        {
-            return handleDeviceCommand(params, commandType);
-        }
-        else
-        {
-            return createErrorResponse("UNKNOWN_COMMAND", "Unknown command: " + commandType);
-        }
+    juce::String commandName = command.getProperty("command", juce::var()).toString();
+    if (commandName.isEmpty()) {
+        return createErrorResponse("Missing command name");
     }
-    catch (const std::exception& e)
-    {
-        return createErrorResponse("COMMAND_EXCEPTION", "Exception processing command: " + juce::String(e.what()));
+    
+    auto it = commandHandlers.find(commandName);
+    if (it == commandHandlers.end()) {
+        return createErrorResponse("Unknown command: " + commandName);
+    }
+    
+    try {
+        juce::var params = command.getProperty("params", juce::var());
+        return it->second(params);
+    }
+    catch (const std::exception& e) {
+        return createErrorResponse(juce::String("Command execution error: ") + e.what());
     }
 }
 
-juce::var CommandProcessor::handleSystemCommand(const juce::var& params, const juce::String& command)
+void CommandProcessor::setEventCallback(EventCallback callback)
 {
-    if (command == "initializeAudioSystem")
-    {
-        int sampleRate = params.getProperty("sampleRate", 44100);
-        int bufferSize = params.getProperty("bufferSize", 512);
-        
-        bool success = audioEngine.initialize(sampleRate, bufferSize);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Audio system initialized"));
-        }
-        else
-        {
-            return createErrorResponse("INIT_FAILED", "Failed to initialize audio system");
-        }
-    }
-    else if (command == "getSystemStatus")
-    {
-        return createSuccessResponse(audioEngine.getSystemStatus());
-    }
-    else if (command == "setAudioDevice")
-    {
-        juce::String deviceId = params.getProperty("deviceId", "");
-        
-        bool success = audioEngine.setAudioDevice(deviceId);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Audio device set"));
-        }
-        else
-        {
-            return createErrorResponse("DEVICE_SET_FAILED", "Failed to set audio device");
-        }
-    }
-    
-    return createErrorResponse("UNKNOWN_SYSTEM_COMMAND", "Unknown system command: " + command);
+    eventCallback = callback;
 }
 
-juce::var CommandProcessor::handleCueCommand(const juce::var& params, const juce::String& command)
+void CommandProcessor::sendEvent(const juce::String& eventType, const juce::var& eventData)
 {
-    if (command == "createAudioCue")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        juce::String filePath = params.getProperty("filePath", "");
-        
-        if (cueId.isEmpty())
-        {
-            return createErrorResponse("INVALID_PARAMS", "Missing cueId");
-        }
-        
-        if (filePath.isEmpty())
-        {
-            return createErrorResponse("INVALID_PARAMS", "Missing filePath");
-        }
-        
-        std::string error = audioEngine.createAudioCue(cueId.toStdString(), filePath.toStdString());
-        
-        if (error.empty())
-        {
-            // Create response with audio info - FIXED: Proper DynamicObject creation
-            auto responseObj = new juce::DynamicObject();
-            responseObj->setProperty("success", true);
-            responseObj->setProperty("cueId", cueId);
-            
-            // Get audio info from the created cue - FIXED: Proper DynamicObject creation
-            auto audioInfoObj = new juce::DynamicObject();
-            audioInfoObj->setProperty("channels", 2); // Placeholder
-            audioInfoObj->setProperty("sampleRate", 44100);
-            audioInfoObj->setProperty("duration", 120.0);
-            audioInfoObj->setProperty("format", "WAV");
-            
-            responseObj->setProperty("audioInfo", juce::var(audioInfoObj));
-            
-            return juce::var(responseObj);
-        }
-        else
-        {
-            return createErrorResponse("CUE_CREATE_FAILED", juce::String(error));
-        }
+    if (eventCallback) {
+        eventCallback(eventType, eventData);
     }
-    else if (command == "playCue")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        float startTime = params.getProperty("startTime", 0.0f);
-        float volume = params.getProperty("volume", 1.0f);
-        
-        bool success = audioEngine.playCue(cueId.toStdString(), startTime, volume);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Cue started"));
-        }
-        else
-        {
-            return createErrorResponse("CUE_NOT_FOUND", "Cue not found: " + cueId);
-        }
-    }
-    else if (command == "stopCue")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        float fadeTime = params.getProperty("fadeOutTime", 0.0f);
-        
-        bool success = audioEngine.stopCue(cueId.toStdString(), fadeTime);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Cue stopped"));
-        }
-        else
-        {
-            return createErrorResponse("CUE_NOT_FOUND", "Cue not found: " + cueId);
-        }
-    }
-    else if (command == "pauseCue")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        
-        bool success = audioEngine.pauseCue(cueId.toStdString());
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Cue paused"));
-        }
-        else
-        {
-            return createErrorResponse("CUE_NOT_FOUND", "Cue not found: " + cueId);
-        }
-    }
-    else if (command == "resumeCue")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        
-        bool success = audioEngine.resumeCue(cueId.toStdString());
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Cue resumed"));
-        }
-        else
-        {
-            return createErrorResponse("CUE_NOT_FOUND", "Cue not found: " + cueId);
-        }
-    }
-    
-    return createErrorResponse("UNKNOWN_CUE_COMMAND", "Unknown cue command: " + command);
 }
 
-juce::var CommandProcessor::handleMatrixCommand(const juce::var& params, const juce::String& command)
+void CommandProcessor::registerCommand(const juce::String& commandName, 
+                                     std::function<juce::var(const juce::var&)> handler)
 {
-    if (command == "setCueMatrixRouting")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        juce::var matrix = params.getProperty("matrix", juce::var());
-        
-        bool success = audioEngine.setCueMatrixRouting(cueId.toStdString(), matrix);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Matrix routing set"));
-        }
-        else
-        {
-            return createErrorResponse("CUE_NOT_FOUND", "Cue not found: " + cueId);
-        }
-    }
-    else if (command == "setCrosspoint")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        int input = params.getProperty("input", 0);
-        int output = params.getProperty("output", 0);
-        float level = params.getProperty("level", 0.0f);
-        
-        bool success = audioEngine.setCrosspoint(cueId.toStdString(), input, output, level);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Crosspoint set"));
-        }
-        else
-        {
-            return createErrorResponse("CUE_NOT_FOUND", "Cue not found: " + cueId);
-        }
-    }
-    else if (command == "setCueInputLevel")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        int input = params.getProperty("input", 0);
-        float level = params.getProperty("level", 0.0f);
-        
-        bool success = audioEngine.setCueInputLevel(cueId.toStdString(), input, level);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Input level set"));
-        }
-        else
-        {
-            return createErrorResponse("CUE_NOT_FOUND", "Cue not found: " + cueId);
-        }
-    }
-    else if (command == "setCueOutputLevel")
-    {
-        juce::String cueId = params.getProperty("cueId", "");
-        int output = params.getProperty("output", 0);
-        float level = params.getProperty("level", 0.0f);
-        
-        bool success = audioEngine.setCueOutputLevel(cueId.toStdString(), output, level);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Output level set"));
-        }
-        else
-        {
-            return createErrorResponse("CUE_NOT_FOUND", "Cue not found: " + cueId);
-        }
-    }
-    
-    return createErrorResponse("UNKNOWN_MATRIX_COMMAND", "Unknown matrix command: " + command);
+    commandHandlers[commandName] = handler;
 }
 
-juce::var CommandProcessor::handlePatchCommand(const juce::var& params, const juce::String& command)
+void CommandProcessor::registerBuiltInCommands()
 {
-    if (command == "createOutputPatch")
-    {
-        juce::String patchId = params.getProperty("patchId", "");
-        juce::String name = params.getProperty("name", "");
-        int cueOutputs = params.getProperty("cueOutputs", 64);
-        int deviceOutputs = params.getProperty("deviceOutputs", 2);
-        
-        bool success = audioEngine.createOutputPatch(patchId.toStdString(), name.toStdString(), 
-                                                    cueOutputs, deviceOutputs);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Output patch created"));
-        }
-        else
-        {
-            return createErrorResponse("PATCH_CREATE_FAILED", "Failed to create patch: " + patchId);
-        }
-    }
-    else if (command == "setPatchMatrixRouting")
-    {
-        juce::String patchId = params.getProperty("patchId", "");
-        juce::var matrix = params.getProperty("matrix", juce::var());
-        
-        bool success = audioEngine.setPatchMatrixRouting(patchId.toStdString(), matrix);
-        
-        if (success)
-        {
-            return createSuccessResponse(juce::var("Patch matrix routing set"));
-        }
-        else
-        {
-            return createErrorResponse("PATCH_NOT_FOUND", "Patch not found: " + patchId);
-        }
-    }
+    // Engine control commands
+    registerCommand("initialize", [this](const juce::var& params) { return handleInitialize(params); });
+    registerCommand("shutdown", [this](const juce::var& params) { return handleShutdown(params); });
+    registerCommand("getStatus", [this](const juce::var& params) { return handleGetStatus(params); });
+    registerCommand("setAudioDevice", [this](const juce::var& params) { return handleSetAudioDevice(params); });
+    registerCommand("getDevices", [this](const juce::var& params) { return handleGetDevices(params); });
     
-    return createErrorResponse("UNKNOWN_PATCH_COMMAND", "Unknown patch command: " + command);
+    // Audio cue commands
+    registerCommand("createCue", [this](const juce::var& params) { return handleCreateCue(params); });
+    registerCommand("loadFile", [this](const juce::var& params) { return handleLoadFile(params); });
+    registerCommand("playCue", [this](const juce::var& params) { return handlePlayCue(params); });
+    registerCommand("stopCue", [this](const juce::var& params) { return handleStopCue(params); });
+    registerCommand("pauseCue", [this](const juce::var& params) { return handlePauseCue(params); });
+    registerCommand("resumeCue", [this](const juce::var& params) { return handleResumeCue(params); });
+    registerCommand("stopAllCues", [this](const juce::var& params) { return handleStopAllCues(params); });
+    
+    // Matrix commands
+    registerCommand("setCrosspoint", [this](const juce::var& params) { return handleSetCrosspoint(params); });
+    registerCommand("getCrosspoint", [this](const juce::var& params) { return handleGetCrosspoint(params); });
+    registerCommand("setInputLevel", [this](const juce::var& params) { return handleSetInputLevel(params); });
+    registerCommand("setOutputLevel", [this](const juce::var& params) { return handleSetOutputLevel(params); });
+    registerCommand("muteOutput", [this](const juce::var& params) { return handleMuteOutput(params); });
+    registerCommand("soloOutput", [this](const juce::var& params) { return handleSoloOutput(params); });
+    
+    // Patch commands
+    registerCommand("setPatchRouting", [this](const juce::var& params) { return handleSetPatchRouting(params); });
+    registerCommand("getPatchRouting", [this](const juce::var& params) { return handleGetPatchRouting(params); });
 }
 
-juce::var CommandProcessor::handleDeviceCommand(const juce::var& params, const juce::String& command)
+juce::var CommandProcessor::handleInitialize(const juce::var& params)
 {
-    if (command == "getAudioDevices")
-    {
-        return createSuccessResponse(audioEngine.getAudioDevices());
-    }
-    else if (command == "setDeviceOutputCount")
-    {
-        // This would be implemented for setting device output count
-        return createSuccessResponse(juce::var("Device output count set"));
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
     }
     
-    return createErrorResponse("UNKNOWN_DEVICE_COMMAND", "Unknown device command: " + command);
+    bool success = audioEngine->initialize();
+    return createSuccessResponse(juce::var(success));
 }
 
-juce::var CommandProcessor::createPlaybackEvent(const std::string& cueId, const std::string& status, 
-                                               double currentTime, double duration)
+juce::var CommandProcessor::handleShutdown(const juce::var& params)
 {
-    // FIXED: Proper DynamicObject creation for events
-    auto eventObj = new juce::DynamicObject();
-    eventObj->setProperty("event", "playbackStatus");
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
     
-    auto dataObj = new juce::DynamicObject();
-    dataObj->setProperty("cueId", juce::String(cueId));
-    dataObj->setProperty("status", juce::String(status));
-    dataObj->setProperty("currentTime", currentTime);
-    dataObj->setProperty("duration", duration);
-    
-    eventObj->setProperty("data", juce::var(dataObj));
-    
-    return juce::var(eventObj);
+    audioEngine->shutdown();
+    return createSuccessResponse();
 }
 
-juce::var CommandProcessor::createPerformanceEvent(float cpuUsage, int dropouts, float memoryUsage)
+juce::var CommandProcessor::handleGetStatus(const juce::var& params)
 {
-    // FIXED: Proper DynamicObject creation for performance events
-    auto eventObj = new juce::DynamicObject();
-    eventObj->setProperty("event", "performanceStats");
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
     
-    auto dataObj = new juce::DynamicObject();
-    dataObj->setProperty("cpuUsage", cpuUsage);
-    dataObj->setProperty("dropouts", dropouts);
-    dataObj->setProperty("memoryUsage", memoryUsage);
-    dataObj->setProperty("activeVoices", 0); // Placeholder
+    auto status = audioEngine->getStatus();
     
-    eventObj->setProperty("data", juce::var(dataObj));
+    juce::DynamicObject::Ptr statusObj = new juce::DynamicObject();
+    statusObj->setProperty("isRunning", status.isRunning);
+    statusObj->setProperty("sampleRate", status.sampleRate);
+    statusObj->setProperty("bufferSize", status.bufferSize);
+    statusObj->setProperty("cpuUsage", status.cpuUsage);
+    statusObj->setProperty("dropoutCount", status.dropoutCount);
+    statusObj->setProperty("currentDevice", status.currentDevice);
     
-    return juce::var(eventObj);
+    return createSuccessResponse(juce::var(statusObj.get()));
 }
 
-juce::var CommandProcessor::createErrorEvent(const std::string& type, const std::string& message)
+juce::var CommandProcessor::handleSetAudioDevice(const juce::var& params)
 {
-    // FIXED: Proper DynamicObject creation for error events
-    auto eventObj = new juce::DynamicObject();
-    eventObj->setProperty("event", "audioError");
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
     
-    auto dataObj = new juce::DynamicObject();
-    dataObj->setProperty("type", juce::String(type));
-    dataObj->setProperty("severity", "error");
-    dataObj->setProperty("message", juce::String(message));
-    dataObj->setProperty("timestamp", juce::Time::getCurrentTime().toMilliseconds());
+    if (!validateParameters(params, {"deviceName"})) {
+        return createErrorResponse("Missing required parameter: deviceName");
+    }
     
-    eventObj->setProperty("data", juce::var(dataObj));
+    juce::String deviceName = params.getProperty("deviceName", juce::var()).toString();
+    bool success = audioEngine->setAudioDevice(deviceName);
     
-    return juce::var(eventObj);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleGetDevices(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    juce::StringArray devices = audioEngine->getAvailableDevices();
+    juce::Array<juce::var> deviceArray;
+    
+    for (const auto& device : devices) {
+        deviceArray.add(juce::var(device));
+    }
+    
+    return createSuccessResponse(juce::var(deviceArray));
+}
+
+juce::var CommandProcessor::handleCreateCue(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId", "filePath"})) {
+        return createErrorResponse("Missing required parameters: cueId, filePath");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    juce::String filePath = params.getProperty("filePath", juce::var()).toString();
+    
+    bool success = audioEngine->createAudioCue(cueId, filePath);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleLoadFile(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId", "filePath"})) {
+        return createErrorResponse("Missing required parameters: cueId, filePath");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    juce::String filePath = params.getProperty("filePath", juce::var()).toString();
+    
+    bool success = audioEngine->loadAudioFile(cueId, filePath);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handlePlayCue(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId"})) {
+        return createErrorResponse("Missing required parameter: cueId");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    double startTime = params.getProperty("startTime", 0.0);
+    double fadeInTime = params.getProperty("fadeInTime", 0.0);
+    
+    bool success = audioEngine->playCue(cueId, startTime, fadeInTime);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleStopCue(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId"})) {
+        return createErrorResponse("Missing required parameter: cueId");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    double fadeOutTime = params.getProperty("fadeOutTime", 0.0);
+    
+    bool success = audioEngine->stopCue(cueId, fadeOutTime);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handlePauseCue(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId"})) {
+        return createErrorResponse("Missing required parameter: cueId");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    bool success = audioEngine->pauseCue(cueId);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleResumeCue(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId"})) {
+        return createErrorResponse("Missing required parameter: cueId");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    bool success = audioEngine->resumeCue(cueId);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleStopAllCues(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    audioEngine->stopAllCues();
+    return createSuccessResponse();
+}
+
+juce::var CommandProcessor::handleSetCrosspoint(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId", "input", "output", "level"})) {
+        return createErrorResponse("Missing required parameters: cueId, input, output, level");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    int input = params.getProperty("input", 0);
+    int output = params.getProperty("output", 0);
+    float level = params.getProperty("level", 0.0f);
+    
+    bool success = audioEngine->setCrosspoint(cueId, input, output, level);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleGetCrosspoint(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId", "input", "output"})) {
+        return createErrorResponse("Missing required parameters: cueId, input, output");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    int input = params.getProperty("input", 0);
+    int output = params.getProperty("output", 0);
+    
+    float level = audioEngine->getCrosspoint(cueId, input, output);
+    return createSuccessResponse(juce::var(level));
+}
+
+juce::var CommandProcessor::handleSetInputLevel(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueId", "input", "level"})) {
+        return createErrorResponse("Missing required parameters: cueId, input, level");
+    }
+    
+    juce::String cueId = params.getProperty("cueId", juce::var()).toString();
+    int input = params.getProperty("input", 0);
+    float level = params.getProperty("level", 1.0f);
+    
+    bool success = audioEngine->setInputLevel(cueId, input, level);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleSetOutputLevel(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"output", "level"})) {
+        return createErrorResponse("Missing required parameters: output, level");
+    }
+    
+    int output = params.getProperty("output", 0);
+    float level = params.getProperty("level", 1.0f);
+    
+    bool success = audioEngine->setOutputLevel(output, level);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleMuteOutput(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"output", "mute"})) {
+        return createErrorResponse("Missing required parameters: output, mute");
+    }
+    
+    int output = params.getProperty("output", 0);
+    bool mute = params.getProperty("mute", false);
+    
+    bool success = audioEngine->muteOutput(output, mute);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleSoloOutput(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"output", "solo"})) {
+        return createErrorResponse("Missing required parameters: output, solo");
+    }
+    
+    int output = params.getProperty("output", 0);
+    bool solo = params.getProperty("solo", false);
+    
+    bool success = audioEngine->soloOutput(output, solo);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleSetPatchRouting(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueOutput", "deviceOutput", "level"})) {
+        return createErrorResponse("Missing required parameters: cueOutput, deviceOutput, level");
+    }
+    
+    int cueOutput = params.getProperty("cueOutput", 0);
+    int deviceOutput = params.getProperty("deviceOutput", 0);
+    float level = params.getProperty("level", 1.0f);
+    
+    bool success = audioEngine->setPatchRouting(cueOutput, deviceOutput, level);
+    return createSuccessResponse(juce::var(success));
+}
+
+juce::var CommandProcessor::handleGetPatchRouting(const juce::var& params)
+{
+    if (!audioEngine) {
+        return createErrorResponse("AudioEngine not available");
+    }
+    
+    if (!validateParameters(params, {"cueOutput", "deviceOutput"})) {
+        return createErrorResponse("Missing required parameters: cueOutput, deviceOutput");
+    }
+    
+    int cueOutput = params.getProperty("cueOutput", 0);
+    int deviceOutput = params.getProperty("deviceOutput", 0);
+    
+    float level = audioEngine->getPatchRouting(cueOutput, deviceOutput);
+    return createSuccessResponse(juce::var(level));
+}
+
+juce::var CommandProcessor::createErrorResponse(const juce::String& message, int code)
+{
+    juce::DynamicObject::Ptr response = new juce::DynamicObject();
+    response->setProperty("success", false);
+    response->setProperty("error", message);
+    response->setProperty("code", code);
+    return juce::var(response.get());
 }
 
 juce::var CommandProcessor::createSuccessResponse(const juce::var& data)
 {
-    // FIXED: Proper DynamicObject creation for success responses
-    auto responseObj = new juce::DynamicObject();
-    responseObj->setProperty("success", true);
-    
-    if (!data.isVoid())
-    {
-        responseObj->setProperty("data", data);
+    juce::DynamicObject::Ptr response = new juce::DynamicObject();
+    response->setProperty("success", true);
+    if (!data.isVoid()) {
+        response->setProperty("data", data);
+    }
+    return juce::var(response.get());
+}
+
+bool CommandProcessor::validateParameters(const juce::var& params, const juce::StringArray& required)
+{
+    if (!params.isObject()) {
+        return false;
     }
     
-    return juce::var(responseObj);
+    for (const auto& param : required) {
+        if (!params.hasProperty(param)) {
+            return false;
+        }
+    }
+    
+    return true;
 }
-
-juce::var CommandProcessor::createErrorResponse(const juce::String& code, const juce::String& message)
-{
-    // FIXED: Proper DynamicObject creation for error responses
-    auto responseObj = new juce::DynamicObject();
-    responseObj->setProperty("success", false);
-    
-    auto errorObj = new juce::DynamicObject();
-    errorObj->setProperty("code", code);
-    errorObj->setProperty("message", message);
-    
-    responseObj->setProperty("error", juce::var(errorObj));
-    
-    return juce::var(responseObj);
-}
-
-} // namespace CueForge

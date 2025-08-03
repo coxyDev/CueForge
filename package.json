@@ -21,7 +21,9 @@
     "pack": "electron-builder --dir",
     "clean": "rimraf dist build",
     "rebuild": "electron-rebuild && npm run build:native",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "setup:juce": "node setup_juce.js",
+    "build:native:full": "build_native.bat"
   },
   "repository": {
     "type": "git",
