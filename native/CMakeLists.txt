@@ -14,26 +14,26 @@ execute_process(COMMAND node -p "process.version"
                 OUTPUT_VARIABLE NODE_VERSION  
                 OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-# Get Node.js include directory
-execute_process(COMMAND node -p "process.config.variables.node_prefix + '/include/node'"
-                OUTPUT_VARIABLE NODE_INCLUDE_DIR
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
+# Use pre-downloaded Electron-compatible Node.js N-API headers
+set(NODE_API_VERSION "27.3.11")  # Replace this with the output of: npx electron -p "process.versions.node"
+set(NODE_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/.node-gyp/${NODE_API_VERSION}/include/node")
 
 # Fallback to standard locations if above fails
-if(NOT EXISTS "${NODE_INCLUDE_DIR}/node_api.h")
-    if(WIN32)
-        # Try to find Node.js installation
-        execute_process(COMMAND where node
-                       OUTPUT_VARIABLE NODE_PATH
-                       OUTPUT_STRIP_TRAILING_WHITESPACE)
-        get_filename_component(NODE_DIR "${NODE_PATH}" DIRECTORY)
-        set(NODE_INCLUDE_DIR "${NODE_DIR}/../include/node")
-    endif()
-endif()
+##if(NOT EXISTS "${NODE_INCLUDE_DIR}/node_api.h")
+##    if(WIN32)
+##        # Try to find Node.js installation
+##        execute_process(COMMAND where node
+##                       OUTPUT_VARIABLE NODE_PATH
+##                       OUTPUT_STRIP_TRAILING_WHITESPACE)
+##        get_filename_component(NODE_DIR "${NODE_PATH}" DIRECTORY)
+##        set(NODE_INCLUDE_DIR "${NODE_DIR}/../include/node")
+##    endif()
+##endif()
 
 # Verify N-API headers exist
+# Verify N-API headers exist (Electron version)
 if(NOT EXISTS "${NODE_INCLUDE_DIR}/node_api.h")
-    message(FATAL_ERROR "Could not find Node.js N-API headers. Please ensure Node.js is installed.")
+    message(FATAL_ERROR "Could not find Electron-compatible Node.js N-API headers at ${NODE_INCLUDE_DIR}.")
 endif()
 
 message(STATUS "Node.js version: ${NODE_VERSION}")
