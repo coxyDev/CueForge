@@ -40,14 +40,14 @@
   "author": "Joel Cox",
   "license": "MIT",
   "devDependencies": {
+    "cmake-js": "^7.3.1",
     "cross-env": "^7.0.3",
     "electron": "^27.0.0",
     "electron-builder": "^24.13.3",
     "electron-rebuild": "^3.2.9",
-    "rimraf": "^5.0.5",
-    "cmake-js": "^7.2.1",
-    "node-addon-api": "^7.0.0",
-    "node-gyp": "^10.0.1"
+    "node-addon-api": "^7.1.1",
+    "node-gyp": "^10.3.1",
+    "rimraf": "^5.0.5"
   },
   "dependencies": {
     "fs-extra": "^11.1.1",
@@ -62,7 +62,7 @@
       "output": "dist",
       "buildResources": "build"
     },
-     "binary": {
+    "binary": {
       "module_name": "cueforge_audio",
       "module_path": "./native/build/Release/",
       "remote_path": "./",
