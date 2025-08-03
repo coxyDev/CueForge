@@ -6,6 +6,7 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 .node-gyp
+.vs 
 
 # Electron build outputs
 dist/
