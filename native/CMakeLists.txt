@@ -27,10 +27,10 @@ else()
 endif()
 
 # ============================================================================
-# NODE.JS AND N-API HEADER CONFIGURATION
+# NODE.JS AND N-API HEADER CONFIGURATION - Updated for Electron v32
 # ============================================================================
 
-# Get Node.js executable path
+# Get Node.js executable and version from current environment
 execute_process(
     COMMAND node -p "process.execPath"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
@@ -39,7 +39,6 @@ execute_process(
     ERROR_QUIET
 )
 
-# Get Node.js version
 execute_process(
     COMMAND node -p "process.version"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
@@ -49,30 +48,102 @@ execute_process(
 )
 
 # Extract version number (remove 'v' prefix)
-string(SUBSTRING ${NODE_VERSION_FULL} 1 -1 NODE_VERSION)
+if(NODE_VERSION_FULL)
+    string(SUBSTRING ${NODE_VERSION_FULL} 1 -1 NODE_VERSION)
+else()
+    set(NODE_VERSION "24.4.0")  # Fallback to current system version
+endif()
 
-message(STATUS "Node.js executable: ${NODE_EXECUTABLE}")
-message(STATUS "Node.js version: ${NODE_VERSION}")
+# Get Electron's Node.js version for comparison
+execute_process(
+    COMMAND npx electron -p "process.versions.node"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
+    OUTPUT_VARIABLE ELECTRON_NODE_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
 
-# Find Node.js installation directory
-get_filename_component(NODE_BIN_DIR "${NODE_EXECUTABLE}" DIRECTORY)
-get_filename_component(NODE_ROOT_DIR "${NODE_BIN_DIR}" DIRECTORY)
+message(STATUS "System Node.js version: ${NODE_VERSION}")
+message(STATUS "Electron Node.js version: ${ELECTRON_NODE_VERSION}")
 
-# Possible Node.js header locations (in priority order)
+# Use Electron's Node.js version if available, otherwise use system version
+if(ELECTRON_NODE_VERSION)
+    set(TARGET_NODE_VERSION "${ELECTRON_NODE_VERSION}")
+else()
+    set(TARGET_NODE_VERSION "${NODE_VERSION}")
+endif()
+
+message(STATUS "Target Node.js version for build: ${TARGET_NODE_VERSION}")
+
+# Find Node.js installation directory and library
+if(NODE_EXECUTABLE)
+    get_filename_component(NODE_BIN_DIR "${NODE_EXECUTABLE}" DIRECTORY)
+    get_filename_component(NODE_ROOT_DIR "${NODE_BIN_DIR}" DIRECTORY)
+    
+    # Look for Node.js import library on Windows
+    if(WIN32)
+        set(NODE_LIB_SEARCH_PATHS
+            "${NODE_ROOT_DIR}/lib/node.lib"
+            "${NODE_BIN_DIR}/node.lib"
+            "C:/Program Files/nodejs/node.lib"
+            "C:/Program Files (x86)/nodejs/node.lib"
+            "${CMAKE_SOURCE_DIR}/../.node-gyp/${TARGET_NODE_VERSION}/node.lib"
+            "$ENV{USERPROFILE}/.node-gyp/${TARGET_NODE_VERSION}/node.lib"
+            "${CMAKE_SOURCE_DIR}/../.node-gyp/${TARGET_NODE_VERSION}/Release/node.lib"
+            "$ENV{USERPROFILE}/.node-gyp/${TARGET_NODE_VERSION}/Release/node.lib"
+        )
+        
+        set(NODE_LIB_FOUND FALSE)
+        foreach(LIB_PATH ${NODE_LIB_SEARCH_PATHS})
+            if(EXISTS "${LIB_PATH}")
+                set(NODE_LIB "${LIB_PATH}")
+                set(NODE_LIB_FOUND TRUE)
+                message(STATUS "✅ Found Node.js library at: ${NODE_LIB}")
+                break()
+            endif()
+        endforeach()
+        
+        if(NOT NODE_LIB_FOUND)
+            message(STATUS "⚠️  Node.js import library not found, will try alternative linking method")
+        endif()
+    endif()
+endif()
+
+# Comprehensive Node.js header search paths for v24+ (including NVM)
 set(NODE_HEADER_SEARCH_PATHS
+    # NVM for Windows locations
+    "C:/nvm4w/v${TARGET_NODE_VERSION}/include/node"
+    "C:/nvm4w/v${NODE_VERSION}/include/node"
+    "$ENV{NVM_HOME}/v${TARGET_NODE_VERSION}/include/node"
+    "$ENV{NVM_HOME}/v${NODE_VERSION}/include/node"
+    
+    # System Node.js installation
     "${NODE_ROOT_DIR}/include/node"
-    "${CMAKE_SOURCE_DIR}/../.node-gyp/${NODE_VERSION}/include/node"
-    "$ENV{USERPROFILE}/.node-gyp/${NODE_VERSION}/include/node" 
-    "$ENV{HOME}/.node-gyp/${NODE_VERSION}/include/node"
-    "$ENV{APPDATA}/npm/node_modules/node/include/node"
     "C:/Program Files/nodejs/include/node"
+    "C:/Program Files (x86)/nodejs/include/node"
+    
+    # node-gyp cache locations
+    "${CMAKE_SOURCE_DIR}/../.node-gyp/${TARGET_NODE_VERSION}/include/node"
+    "${CMAKE_SOURCE_DIR}/../.node-gyp/${NODE_VERSION}/include/node"
+    "$ENV{USERPROFILE}/.node-gyp/${TARGET_NODE_VERSION}/include/node"
+    "$ENV{USERPROFILE}/.node-gyp/${NODE_VERSION}/include/node"
+    "$ENV{HOME}/.node-gyp/${TARGET_NODE_VERSION}/include/node"
+    "$ENV{HOME}/.node-gyp/${NODE_VERSION}/include/node"
+    
+    # npm global locations
+    "$ENV{APPDATA}/npm/node_modules/node/include/node"
+    "$ENV{NPM_CONFIG_PREFIX}/include/node"
+    
+    # Alternative locations
     "${CMAKE_SOURCE_DIR}/../node_modules/node/include/node"
+    "${CMAKE_SOURCE_DIR}/node_modules/node/include/node"
 )
 
 # Find actual Node.js headers (node_api.h)
 set(NODE_HEADERS_FOUND FALSE)
 set(NODE_INCLUDE_DIR "")
 
+message(STATUS "Searching for Node.js N-API headers...")
 foreach(SEARCH_PATH ${NODE_HEADER_SEARCH_PATHS})
     if(EXISTS "${SEARCH_PATH}/node_api.h")
         set(NODE_INCLUDE_DIR "${SEARCH_PATH}")
@@ -82,69 +153,28 @@ foreach(SEARCH_PATH ${NODE_HEADER_SEARCH_PATHS})
     endif()
 endforeach()
 
-# If Node.js headers not found, try to install them
-if(NOT NODE_HEADERS_FOUND)
-    message(STATUS "⚠️  Node.js headers not found, attempting to install...")
-    
-    # Try to install headers using node-gyp
-    execute_process(
-        COMMAND node-gyp install ${NODE_VERSION}
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/..
-        RESULT_VARIABLE NODE_GYP_RESULT
-        OUTPUT_VARIABLE NODE_GYP_OUTPUT
-        ERROR_VARIABLE NODE_GYP_ERROR
-    )
-    
-    # Check again after installation attempt
-    foreach(SEARCH_PATH ${NODE_HEADER_SEARCH_PATHS})
-        if(EXISTS "${SEARCH_PATH}/node_api.h")
-            set(NODE_INCLUDE_DIR "${SEARCH_PATH}")
-            set(NODE_HEADERS_FOUND TRUE)
-            message(STATUS "✅ Node.js headers installed at: ${NODE_INCLUDE_DIR}")
-            break()
-        endif()
-    endforeach()
-endif()
-
-# Find node-addon-api (C++ wrapper)
+# Find node-addon-api (C++ wrapper) - updated for v8+
 find_path(NODE_ADDON_API_DIR
     NAMES "napi.h"
     PATHS 
         "${CMAKE_SOURCE_DIR}/../node_modules/node-addon-api"
         "${CMAKE_SOURCE_DIR}/node_modules/node-addon-api"
+        "$ENV{APPDATA}/npm/node_modules/node-addon-api"
     NO_DEFAULT_PATH
 )
 
-# Final validation
+# Final validation with helpful error messages
 if(NOT NODE_HEADERS_FOUND)
-    message(STATUS "")
-    message(STATUS "❌ CRITICAL: Node.js headers not found!")
-    message(STATUS "Searched paths:")
-    foreach(PATH ${NODE_HEADER_SEARCH_PATHS})
-        message(STATUS "  - ${PATH}")
-    endforeach()
-    message(STATUS "")
-    message(STATUS "🔧 To fix this issue:")
-    message(STATUS "  1. Close Visual Studio")
-    message(STATUS "  2. Open 'Developer Command Prompt for VS 2022'")
-    message(STATUS "  3. cd \"${CMAKE_SOURCE_DIR}/..\"")
-    message(STATUS "  4. npm install")
-    message(STATUS "  5. node-gyp install ${NODE_VERSION}")
-    message(STATUS "  6. Reopen project in Visual Studio")
-    message(STATUS "")
-    message(FATAL_ERROR "Node.js N-API headers are required to build the native module")
+    message(FATAL_ERROR "Node.js N-API headers are required for native module compilation")
 endif()
 
 if(NOT NODE_ADDON_API_DIR)
-    message(STATUS "")
-    message(STATUS "❌ node-addon-api not found!")
-    message(STATUS "🔧 To fix: npm install node-addon-api")
-    message(STATUS "")
-    message(FATAL_ERROR "node-addon-api is required for C++ N-API development")
+    message(FATAL_ERROR "node-addon-api v8+ is required for Node.js v24 compatibility")
 endif()
 
 message(STATUS "✅ Node.js headers: ${NODE_INCLUDE_DIR}")
 message(STATUS "✅ Node addon API: ${NODE_ADDON_API_DIR}")
+message(STATUS "✅ Target Node.js version: ${TARGET_NODE_VERSION}")
 
 # ============================================================================
 # JUCE FRAMEWORK CONFIGURATION
@@ -169,21 +199,7 @@ foreach(JUCE_PATH ${JUCE_SEARCH_PATHS})
 endforeach()
 
 if(NOT JUCE_FOUND)
-    message(STATUS "")
-    message(STATUS "❌ JUCE framework not found!")
-    message(STATUS "Searched locations:")
-    foreach(PATH ${JUCE_SEARCH_PATHS})
-        message(STATUS "  - ${PATH}")
-    endforeach()
-    message(STATUS "")
-    message(STATUS "Current source directory: ${CMAKE_CURRENT_SOURCE_DIR}")
-    message(STATUS "Project root directory: ${CMAKE_SOURCE_DIR}")
-    message(STATUS "")
-    message(FATAL_ERROR 
-        "Please ensure JUCE is installed at one of the above locations.\n"
-        "Run: npm run setup:juce\n"
-        "Or manually download JUCE 7.x to native/third_party/JUCE/"
-    )
+    message(FATAL_ERROR "JUCE framework not found! Please ensure JUCE is installed at native/third_party/JUCE/")
 endif()
 
 # Configure JUCE for our build
@@ -196,15 +212,8 @@ add_subdirectory(${JUCE_DIR})
 message(STATUS "JUCE framework found at: ${JUCE_DIR}")
 
 # ============================================================================
-# TARGET DEFINITION
+# TARGET DEFINITION - Create target FIRST
 # ============================================================================
-
-# Include directories
-target_include_directories(cueforge_audio PRIVATE
-    include
-    ${NODE_INCLUDE_DIR}
-    ${NODE_ADDON_API_DIR}
-)
 
 # Define our target as a shared library (for Node.js native module)
 add_library(cueforge_audio SHARED
@@ -216,14 +225,21 @@ add_library(cueforge_audio SHARED
     bridge/audio_bridge.cpp
 )
 
-# Set target properties for Node.js native module
+# Set target properties for Node.js native module - IMMEDIATELY after creation
 set_target_properties(cueforge_audio PROPERTIES
     PREFIX ""
     SUFFIX ".node"
     CXX_VISIBILITY_PRESET hidden
 )
 
-# Link JUCE modules
+# Include directories - AFTER target is created
+target_include_directories(cueforge_audio PRIVATE
+    include
+    ${NODE_INCLUDE_DIR}
+    ${NODE_ADDON_API_DIR}
+)
+
+# Link JUCE modules - AFTER target is created
 target_link_libraries(cueforge_audio PRIVATE
     juce::juce_core
     juce::juce_events
@@ -234,6 +250,22 @@ target_link_libraries(cueforge_audio PRIVATE
     juce::juce_audio_utils
     juce::juce_data_structures
 )
+
+# Link Node.js library for N-API functions
+if(WIN32 AND NODE_LIB_FOUND)
+    target_link_libraries(cueforge_audio PRIVATE "${NODE_LIB}")
+    message(STATUS "✅ Linking Node.js library: ${NODE_LIB}")
+else()
+    # Alternative: Use delay-loaded linking (Windows-specific)
+    if(WIN32)
+        target_link_options(cueforge_audio PRIVATE 
+            "/DELAYLOAD:node.exe"
+            "/IGNORE:4199"  # Ignore delay-load warnings
+        )
+        target_link_libraries(cueforge_audio PRIVATE delayimp)
+        message(STATUS "✅ Using delay-load linking for Node.js")
+    endif()
+endif()
 
 # ============================================================================
 # PLATFORM-SPECIFIC CONFIGURATION
@@ -286,23 +318,8 @@ if(WIN32)
         endif()
     endforeach()
     
-    # If not found in standard locations, prompt user
-    if(NOT ASIO_SDK_FOUND)
-        message(STATUS "")
-        message(STATUS "ASIO SDK not found in standard locations.")
-        message(STATUS "Checked locations:")
-        foreach(PATH ${ASIO_SDK_SEARCH_PATHS})
-            message(STATUS "  - ${PATH}")
-        endforeach()
-        message(STATUS "")
-        message(STATUS "Since you have the ASIO SDK, please:")
-        message(STATUS "  1. Copy it to: ${CMAKE_CURRENT_SOURCE_DIR}/third_party/asiosdk")
-        message(STATUS "  2. Or set ASIO_SDK_PATH: cmake .. -DASIO_SDK_PATH=\"/path/to/asiosdk\"")
-        message(STATUS "")
-        message(STATUS "Building without ASIO support for now...")
-        target_compile_definitions(cueforge_audio PRIVATE JUCE_ASIO=0)
-    else()
-        # Configure ASIO SDK
+    # Configure ASIO SDK
+    if(ASIO_SDK_FOUND)
         target_include_directories(cueforge_audio PRIVATE 
             "${ASIO_SDK_DIR}/common"
             "${ASIO_SDK_DIR}/host"
@@ -310,19 +327,9 @@ if(WIN32)
         )
         target_compile_definitions(cueforge_audio PRIVATE JUCE_ASIO=1)
         message(STATUS "✅ ASIO support enabled")
-    endif()
-    
-    # Allow manual override via command line
-    if(DEFINED ASIO_SDK_PATH AND EXISTS "${ASIO_SDK_PATH}/common/iasiodrv.h")
-        set(ASIO_SDK_DIR "${ASIO_SDK_PATH}")
-        target_include_directories(cueforge_audio PRIVATE 
-            "${ASIO_SDK_DIR}/common"
-            "${ASIO_SDK_DIR}/host" 
-            "${ASIO_SDK_DIR}/host/pc"
-        )
-        target_compile_definitions(cueforge_audio PRIVATE JUCE_ASIO=1)
-        message(STATUS "✅ Using manually specified ASIO SDK: ${ASIO_SDK_DIR}")
-        set(ASIO_SDK_FOUND TRUE)
+    else()
+        message(STATUS "⚠️  ASIO SDK not found - building without ASIO support")
+        target_compile_definitions(cueforge_audio PRIVATE JUCE_ASIO=0)
     endif()
     
     # Link Windows libraries
@@ -442,10 +449,11 @@ else()
     )
 endif()
 
-# N-API specific configuration
+# N-API specific configuration for Node.js v24+
 target_compile_definitions(cueforge_audio PRIVATE
-    NAPI_VERSION=6
+    NAPI_VERSION=8                           # Updated for Node.js v24
     NODE_ADDON_API_DISABLE_DEPRECATED
+    NODE_API_NO_EXTERNAL_BUFFERS_ALLOWED    # Security feature in v24
 )
 
 # ============================================================================
@@ -458,8 +466,8 @@ message(STATUS "=== CueForge Audio Engine Build Configuration ===")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME} (${PLATFORM_NAME})")
 message(STATUS "  Architecture: ${CMAKE_SYSTEM_PROCESSOR} (${ARCH_NAME})")
-message(STATUS "  Electron version: ${ELECTRON_VERSION}")
-message(STATUS "  Node.js version: ${NODE_VERSION}")
+message(STATUS "  Electron version: ${ELECTRON_NODE_VERSION}")
+message(STATUS "  Node.js version: ${TARGET_NODE_VERSION}")
 message(STATUS "  JUCE directory: ${JUCE_DIR}")
 message(STATUS "  Node.js headers: ${NODE_INCLUDE_DIR}")
 message(STATUS "  Node addon API: ${NODE_ADDON_API_DIR}")
